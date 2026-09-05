@@ -88,37 +88,50 @@ Thay đổi trong các file này chỉ gồm: import, `print` → `logger`, và 
 
 | | Bản cũ | Bản mới |
 |---|---|---|
-| Cổng API | 2005 | 8000 |
-| Cổng worker | 2222 | 8001 |
+| Cổng | 2005 / 2222 | **giữ nguyên 2005 / 2222** |
+| VLM | Host thủ công bên ngoài | vLLM trong stack, cổng **3333** |
 | Nơi ghi metadata | `cwd/metadata` | `METADATA_DIR` (env) |
 | Secret | Trong `config.yaml` | Chỉ từ env, fail-fast khi thiếu |
 | Log | `print` | `logging` có level |
 | Vector DB client | Tạo mới mỗi request | Cache theo collection |
-| Chạy | Thủ công 3 tiến trình | `docker compose up` |
+| Chạy | Thủ công 3 tiến trình + vLLM riêng | `make up-gpu` |
 
-Client cũ trỏ cổng 2005/2222 cần đổi sang 8000/8001, hoặc map lại cổng trong `docker-compose.yml`:
-
-```yaml
-backend:
-  ports:
-    - "2005:8000"
-worker:
-  ports:
-    - "2222:8001"
-```
+Cổng đã map khớp bản cũ nên **client hiện có không phải đổi số cổng**.
 
 ---
 
 ## `agent_tung` cần đổi gì
 
-`agent_tung/config.yaml` đang trỏ:
+Chỉ **một dòng** — địa chỉ host:
 
 ```yaml
 chunk_search_tool:
-  url: http://80.188.223.202:33915/     # đổi sang địa chỉ backend mới
-  endpoint_semantic: search_with_images  # giữ nguyên
-  endpoint_title: search_by_section_title # giữ nguyên
-  get_ToC: table_of_contents              # giữ nguyên
+  url: http://localhost:2005/             # ← đổi dòng này
+  endpoint_semantic: search_with_images    # giữ nguyên
+  endpoint_title: search_by_section_title  # giữ nguyên
+  get_ToC: table_of_contents               # giữ nguyên
+  timeout: 1000                            # giữ nguyên
 ```
 
-Chỉ cần đổi `url`. Ba endpoint giữ nguyên tên và shape response nên phần còn lại không phải sửa.
+Ba endpoint giữ nguyên tên **và shape response** nên `get_title.py`, `agent_manager.py` không phải sửa.
+
+`custom_llm` thì khớp sẵn, không cần đổi gì:
+
+```yaml
+custom_llm:
+  base_url: "http://localhost:3333/v1"     # ← vLLM trong stack đã ở cổng này
+  model_name: "hostedvllm/OpenGVLab/InternVL3-8B"
+```
+
+Chỉ cần `VLM_MODEL_NAME` trong `.env` khớp phần sau tiền tố `hostedvllm/`. Mặc định đã đúng.
+
+Nếu `agent_tung` chạy trong container cùng network thì dùng tên service thay vì `localhost`:
+
+```yaml
+chunk_search_tool:
+  url: http://backend:8000/
+custom_llm:
+  base_url: "http://vllm:8000/v1"
+```
+
+Hai service `page_search_tool` (:3000) và `mcp_server` (:9000) không thuộc stack này — vẫn tự quản lý như cũ.

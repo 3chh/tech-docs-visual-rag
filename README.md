@@ -11,29 +11,44 @@ Phù hợp với tài liệu kỹ thuật dày, phân cấp sâu, nhiều công 
 ## Kiến trúc
 
 ```
-                                  ┌──────────────┐
-                                  │   Frontend   │  Gradio, cổng 7860
-                                  │  (không GPU) │  gọi backend qua HTTP
-                                  └──────┬───────┘
-                                         │ HTTP
-                                  ┌──────▼───────┐
-                    ┌─────────────┤   Backend    │  FastAPI, cổng 8000
-                    │             │  ColQwen GPU │  embed + truy xuất
-                    │             └──────┬───────┘
-              HTTP  │                    │
-                    │                    │ gRPC
-             ┌──────▼───────┐     ┌──────▼───────┐
-             │  PDF Worker  │     │    Qdrant    │  cổng 6333/6334
-             │ PaddleOCR GPU│     │ multi-vector │
-             │  cổng 8001   │     └──────────────┘
-             └──────┬───────┘
-                    │ ghi ảnh-mục
-             ┌──────▼───────┐
-             │  volume /data│  dùng chung giữa worker và backend
-             └──────────────┘
+                    ┌──────────────┐         ┌──────────────┐
+                    │   Frontend   │ ──────► │     vLLM     │  :3333
+                    │  Gradio 7860 │  HTTP   │  VLM đọc ảnh │  Docker image
+                    │  (không GPU) │         │     GPU      │  vllm/vllm-openai
+                    └──────┬───────┘         └──────▲───────┘
+                           │ HTTP                   │
+                    ┌──────▼───────┐                │
+       ┌────────────┤   Backend    ├────────────────┘
+       │            │  FastAPI 2005│
+       │            │  ColQwen GPU │
+       │ HTTP       └──────┬───────┘
+       │                   │ gRPC
+┌──────▼───────┐    ┌──────▼───────┐
+│  PDF Worker  │    │    Qdrant    │  :6333 / :6334
+│ PaddleOCR GPU│    │ multi-vector │
+│    :2222     │    └──────────────┘
+└──────┬───────┘
+       │ ghi ảnh-mục
+┌──────▼───────────────┐
+│ volume /data (chung) │  worker ghi, backend và frontend đọc
+└──────────────────────┘
 ```
 
-Ba service tách riêng vì **profile tài nguyên khác nhau**: worker giữ PaddleOCR + layout model, backend giữ ColQwen, frontend không nạp model nào. Gộp chung một tiến trình sẽ hết VRAM.
+Các service tách riêng vì **profile tài nguyên khác nhau**: worker giữ PaddleOCR + layout model, backend giữ ColQwen, vLLM giữ VLM, frontend không nạp model nào. Gộp chung một tiến trình sẽ hết VRAM.
+
+### Cổng
+
+Map khớp bản `chatpdf_ver_2` cũ nên **`agent_tung` và client hiện có không phải sửa gì**:
+
+| Service | Cổng | Ai gọi |
+|---|---|---|
+| vLLM | **3333** | `agent_tung` → `custom_llm.base_url` |
+| Backend | **2005** | `agent_tung` → `chunk_search_tool.url` |
+| Worker | **2222** | Backend gọi nội bộ |
+| Qdrant | 6333 / 6334 | Backend gọi nội bộ |
+| Frontend | 7860 | Trình duyệt |
+
+Đổi cổng bằng biến trong `.env` (`BACKEND_PORT`, `VLLM_PORT`…).
 
 ### Luồng xử lý
 
@@ -45,52 +60,79 @@ Ba service tách riêng vì **profile tài nguyên khác nhau**: worker giữ Pa
 
 ## Bắt đầu nhanh
 
+Chỉ cần Docker + NVIDIA Container Toolkit. **Không cài gì trên máy** — vLLM, ColQwen, PaddleOCR đều chạy trong container và tự tải model.
+
 ```bash
 git clone <repo> && cd cosmo-chatpdf
 
 cp .env.example .env
-# Điền tối thiểu: GEMINI_API_KEY, VLM_ENDPOINT, VLM_MODEL_NAME
+# Điền GEMINI_API_KEY — đó là biến bắt buộc duy nhất
 
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+make up-gpu        # một lệnh, cả stack lên
 ```
 
-Mở http://localhost:7860.
-
-Không có GPU thì `docker compose up -d` vẫn chạy, nhưng embed và OCR sẽ rất chậm — chỉ dùng để kiểm tra giao diện.
+Lần đầu mất **15–30 phút** để tải model (~15GB). Theo dõi:
 
 ```bash
-make help     # xem các lệnh có sẵn
-make up-gpu   # chạy với GPU
-make logs     # theo dõi log
-make down     # dừng
+make logs-vllm     # tiến trình tải VLM
+make health        # kiểm tra khi xong
+```
+
+Xong thì mở http://localhost:7860.
+
+Muốn tải model trước cho khỏi chờ lúc khởi động:
+
+```bash
+make pull-models && make up-gpu
+```
+
+```bash
+make help          # xem tất cả lệnh
+make ps            # trạng thái service
+make down          # dừng
+```
+
+Không có GPU thì `make up` vẫn lên được để xem giao diện, nhưng vLLM sẽ không chạy nổi và embed cực chậm.
+
+---
+
+## Model
+
+Hệ thống dùng ba model, hai chạy trên GPU của bạn:
+
+| Model | Việc | Ở đâu | VRAM |
+|---|---|---|---|
+| **VLM** (InternVL3-8B) | Đọc ảnh-mục, sinh câu trả lời | vLLM trong stack | ~8 GB |
+| **ColQwen 2.5-3B** | Embed ảnh-mục để truy xuất | backend, tự tải | ~10 GB |
+| **PaddleOCR + PP-DocLayout** | Layout detection, OCR | worker, tự tải | ~5 GB |
+| Gemini Flash | Sửa cây mục lục | API ngoài | 0 |
+
+vLLM chạy bằng **Docker image** `vllm/vllm-openai`, không phải pip install. Model weights tải vào volume `cosmo_hf-cache` dùng chung, chỉ tải một lần.
+
+Chọn model theo VRAM, tách GPU, dùng VLM host sẵn ở nơi khác, xử lý OOM — xem **[docs/MODEL_HOSTING.md](docs/MODEL_HOSTING.md)**.
+
+Nếu đã có vLLM chạy ở máy khác:
+
+```bash
+# .env
+VLM_ENDPOINT=http://192.168.1.50:8000/v1
+make up-external-vlm      # không khởi động vllm trong stack
 ```
 
 ---
 
 ## Cấu hình
 
-Mọi giá trị trong `backend/config/config.yaml` đều override được bằng biến môi trường. **Secret chỉ đọc từ env, không bao giờ để trong YAML.**
-
-### Biến bắt buộc
-
-| Biến | Ý nghĩa |
-|---|---|
-| `GEMINI_API_KEY` | LLM sửa cây mục lục (bước 6 của pipeline index) |
-| `VLM_ENDPOINT` | Endpoint OpenAI-compatible của VLM đọc ảnh |
-| `VLM_MODEL_NAME` | Tên model VLM |
-| `OPENAI_API_KEY` | Key cho VLM endpoint (`EMPTY` nếu là vLLM tự host) |
-
-Thiếu secret bắt buộc thì service **báo lỗi ngay lúc khởi động**, không phải lúc gọi API.
-
-### Biến hay dùng
+Mọi giá trị trong `backend/config/config.yaml` đều override được bằng biến môi trường. **Secret chỉ đọc từ env, không bao giờ để trong YAML.** Thiếu secret bắt buộc thì service báo lỗi ngay lúc khởi động, không phải lúc gọi API.
 
 | Biến | Mặc định | Ghi chú |
 |---|---|---|
-| `EMBEDDING_TYPE` | `longcolqwen` | `longcolqwen` \| `colqwen` \| `colpali` \| `colidefics` |
-| `EMBEDDING_MAX_NUM_VISUAL_TOKENS` | `8192` | Giảm xuống 4096 nếu thiếu VRAM |
+| `GEMINI_API_KEY` | — | **Bắt buộc.** LLM sửa cây mục lục |
+| `VLM_MODEL_NAME` | `OpenGVLab/InternVL3-8B` | Chọn theo VRAM |
+| `VLLM_GPU_MEMORY_UTILIZATION` | `0.35` | Chừa VRAM cho ColQwen và PaddleOCR |
+| `EMBEDDING_MAX_NUM_VISUAL_TOKENS` | `8192` | Giảm 4096 nếu thiếu VRAM |
 | `EMBEDDING_MIN_WIDTH` | `600` | Chiều rộng tối thiểu khi resize ảnh-mục |
 | `VECTORDB_TYPE` | `qdrant-standalone` | `qdrant-standalone` \| `milvus-lite` \| `milvus-standalone` |
-| `METADATA_DIR` | `./data/metadata` | Nơi lưu ảnh-mục; worker và backend phải trỏ chung |
 | `LOG_LEVEL` | `INFO` | `DEBUG` để xem chi tiết từng bước pipeline |
 
 Danh sách đầy đủ: [.env.example](.env.example).
@@ -99,23 +141,29 @@ Danh sách đầy đủ: [.env.example](.env.example).
 
 ## Yêu cầu phần cứng
 
-| Thành phần | VRAM | Ghi chú |
-|---|---|---|
-| Backend (ColQwen 3B) | ~8–10 GB | Với `max_num_visual_tokens=8192` |
-| Worker (PaddleOCR + layout) | ~4–6 GB | Chạy theo đợt khi index |
-| VLM sinh câu trả lời | tuỳ model | Thường host riêng bằng vLLM |
-| Frontend | 0 | Không nạp model |
+**Tối thiểu: một GPU 24GB** (RTX 4090, A5000) với cấu hình mặc định:
 
-Backend và worker có thể chung một GPU 24GB nếu không index và truy vấn đồng thời.
+```
+vLLM (InternVL3-8B)      ~8.4 GB
+ColQwen 2.5-3B           ~9.5 GB
+PaddleOCR + layout       ~4.5 GB
+                        ─────────
+                         ~22.4 GB / 24 GB
+```
+
+Sát ngưỡng — chạy được nếu không index sách lớn trong khi có người truy vấn. Máy nhiều GPU thì tách vLLM ra riêng, xem [docs/MODEL_HOSTING.md](docs/MODEL_HOSTING.md).
+
+Đĩa: ~50GB cho image và model cache.
 
 ---
 
 ## Tài liệu từng phần
 
-- [backend/README.md](backend/README.md) — API reference, chạy local, cấu trúc pipeline
-- [frontend/README.md](frontend/README.md) — giao diện, cấu hình, chạy local
+- [docs/MODEL_HOSTING.md](docs/MODEL_HOSTING.md) — **chọn model, chia VRAM, xử lý OOM**
 - [docs/VERIFICATION.md](docs/VERIFICATION.md) — **đã kiểm chứng gì, còn gì phải tự chạy**
 - [docs/MIGRATION.md](docs/MIGRATION.md) — đối chiếu với bản `chatpdf_ver_2` cũ
+- [backend/README.md](backend/README.md) — API reference, chạy local, cấu trúc pipeline
+- [frontend/README.md](frontend/README.md) — giao diện, cấu hình, chạy local
 
 ---
 

@@ -1,12 +1,54 @@
-# Cosmo ChatPDF — stack đầy đủ.
+# Cosmo ChatPDF — toàn bộ stack, một lệnh.
 #
-#   docker compose up -d                                    # CPU (backend/worker sẽ chậm)
-#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d   # có GPU
+#   make up          # CPU (chỉ để xem giao diện)
+#   make up-gpu      # có GPU — dùng cái này khi chạy thật
 #
-# Backend và worker dùng chung volume `app-data` để API đọc được ảnh-mục mà
-# worker sinh ra.
+# Cổng map khớp với bản chatpdf_ver_2 cũ nên agent_tung và client hiện có
+# không phải sửa gì ngoài host:
+#
+#   vLLM     3333   <- agent_tung custom_llm.base_url
+#   backend  2005   <- agent_tung chunk_search_tool.url
+#   worker   2222
+#   qdrant   6333 / 6334
+#   frontend 7860
+#
+# Dùng VLM host sẵn ở nơi khác thì thêm -f docker-compose.external-vlm.yml
+# để bỏ service vllm.
+
+# Cố định tên project để tên volume không đổi theo tên thư mục.
+name: cosmo
 
 services:
+  # --- Model serving --------------------------------------------------------
+  vllm:
+    image: vllm/vllm-openai:v0.9.2
+    container_name: cosmo-vllm
+    restart: unless-stopped
+    ports:
+      - "${VLLM_PORT:-3333}:8000"
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+    command:
+      - --model=${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
+      - --served-model-name=${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
+      # Chừa VRAM cho ColQwen (backend) và PaddleOCR (worker) trên cùng GPU.
+      - --gpu-memory-utilization=${VLLM_GPU_MEMORY_UTILIZATION:-0.35}
+      - --max-model-len=${VLLM_MAX_MODEL_LEN:-8192}
+      - --trust-remote-code
+      - --host=0.0.0.0
+      - --port=8000
+    ipc: host
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 30s
+      timeout: 10s
+      # Tải model lần đầu có thể mất 10-20 phút tuỳ mạng.
+      start_period: 1200s
+      retries: 5
+
+  # --- Vector database ------------------------------------------------------
   qdrant:
     image: qdrant/qdrant:v1.12.5
     container_name: cosmo-qdrant
@@ -26,6 +68,7 @@ services:
       retries: 5
       start_period: 10s
 
+  # --- Xử lý PDF ------------------------------------------------------------
   worker:
     build:
       context: ./backend
@@ -33,22 +76,32 @@ services:
     container_name: cosmo-worker
     restart: unless-stopped
     ports:
-      - "${WORKER_PORT:-8001}:8001"
+      - "${WORKER_PORT:-2222}:8001"
     volumes:
       - app-data:/data
+      - hf-cache:/data/.cache/huggingface
     environment:
       DATA_DIR: /data
       METADATA_DIR: /data/metadata
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
       TOC_VALIDATOR_TYPE: ${TOC_VALIDATOR_TYPE:-gemini}
       TOC_VALIDATOR_MODEL_NAME: ${TOC_VALIDATOR_MODEL_NAME:-gemini-2.0-flash}
       TOC_VALIDATOR_ENDPOINT: ${TOC_VALIDATOR_ENDPOINT:-https://generativelanguage.googleapis.com/v1beta/openai/}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY chưa được đặt trong .env}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
-      VLM_TYPE: ${VLM_TYPE:-openai}
-      VLM_ENDPOINT: ${VLM_ENDPOINT:-http://localhost:8000/v1}
-      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-78B-AWQ}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY chưa đặt trong .env}
 
+      VLM_TYPE: openai
+      VLM_ENDPOINT: http://vllm:8000/v1
+      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 300s
+      retries: 3
+
+  # --- API ------------------------------------------------------------------
   backend:
     build:
       context: ./backend
@@ -56,9 +109,10 @@ services:
     container_name: cosmo-backend
     restart: unless-stopped
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_PORT:-2005}:8000"
     volumes:
       - app-data:/data
+      - hf-cache:/data/.cache/huggingface
     depends_on:
       qdrant:
         condition: service_healthy
@@ -84,12 +138,19 @@ services:
 
       PDF_WORKER_ENDPOINT: http://worker:8001/upload_pdf/
 
-      VLM_TYPE: ${VLM_TYPE:-openai}
-      VLM_ENDPOINT: ${VLM_ENDPOINT:-http://localhost:8000/v1}
-      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-78B-AWQ}
+      VLM_TYPE: openai
+      VLM_ENDPOINT: http://vllm:8000/v1
+      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 300s
+      retries: 3
 
+  # --- Giao diện ------------------------------------------------------------
   frontend:
     build:
       context: ./frontend
@@ -102,15 +163,18 @@ services:
       # Chỉ đọc: frontend cần đường dẫn ảnh-mục để hiển thị.
       - app-data:/data:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     environment:
       BACKEND_URL: http://backend:8000
       FRONTEND_SEARCH_TIMEOUT: ${FRONTEND_SEARCH_TIMEOUT:-1000}
-      VLM_ENDPOINT: ${VLM_ENDPOINT:-http://localhost:8000/v1}
-      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-78B-AWQ}
+      VLM_ENDPOINT: http://vllm:8000/v1
+      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 volumes:
   qdrant-data:
   app-data:
+  # Cache model dùng chung: vLLM, ColQwen, PaddleOCR đều tải về đây một lần.
+  hf-cache:

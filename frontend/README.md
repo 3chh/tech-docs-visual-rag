@@ -62,7 +62,7 @@ Tắt tuỳ chọn này khi tài liệu không có mục lục, hoặc khi muố
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `BACKEND_URL` | `http://localhost:8000` | Địa chỉ backend |
+| `BACKEND_URL` | `http://localhost:2005` | Địa chỉ backend |
 | `FRONTEND_PORT` | `7860` | Cổng Gradio |
 | `FRONTEND_SEARCH_TIMEOUT` | `1000` | Giây. Một lượt search có thể rất lâu |
 | `FRONTEND_UPLOAD_TIMEOUT` | `3600` | Giây. Index sách vài trăm trang rất lâu |
@@ -79,9 +79,9 @@ Frontend gọi VLM **trực tiếp**, không qua backend — backend chỉ lo tr
 ```bash
 pip install -r requirements.txt
 
-export BACKEND_URL=http://localhost:8000
-export VLM_ENDPOINT=http://your-vllm:8000/v1
-export VLM_MODEL_NAME=OpenGVLab/InternVL3-78B-AWQ
+export BACKEND_URL=http://localhost:2005
+export VLM_ENDPOINT=http://localhost:3333/v1
+export VLM_MODEL_NAME=OpenGVLab/InternVL3-8B
 export OPENAI_API_KEY=EMPTY
 
 python -m frontend.app.main

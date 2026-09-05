@@ -4,8 +4,8 @@ Hai service dùng chung một codebase:
 
 | Service | Entrypoint | Cổng | Nạp model |
 |---|---|---|---|
-| **API** | `backend.app.main:app` | 8000 | ColQwen (embed + truy vấn) |
-| **Worker** | `backend.worker.main:app` | 8001 | PaddleOCR + PP-DocLayout |
+| **API** | `backend.app.main:app` | 8000 (host 2005) | ColQwen (embed + truy vấn) |
+| **Worker** | `backend.worker.main:app` | 8001 (host 2222) | PaddleOCR + PP-DocLayout |
 
 Tách tiến trình vì hai bộ model không vừa chung một GPU. Chúng trao đổi qua HTTP và dùng chung volume `METADATA_DIR`.
 
@@ -13,12 +13,12 @@ Tách tiến trình vì hai bộ model không vừa chung một GPU. Chúng trao
 
 ## API Reference
 
-Tất cả endpoint đều ở root, không có prefix. Swagger UI: `http://localhost:8000/docs`.
+Tất cả endpoint đều ở root, không có prefix. Swagger UI: `http://localhost:2005/docs`.
 
 ### `GET /health`
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:2005/health
 ```
 ```json
 {"status": "healthy", "service": "cosmo-chatpdf-backend", "version": "1.0.0"}
@@ -31,7 +31,7 @@ curl http://localhost:8000/health
 Tìm kiếm ngữ nghĩa, trả về ảnh-mục kèm base64.
 
 ```bash
-curl -X POST http://localhost:8000/search_with_images \
+curl -X POST http://localhost:2005/search_with_images \
   -H "Content-Type: application/json" \
   -d '{"query": "軸方向圧縮力を受ける部材", "user_id": "demo", "top_k": 5}'
 ```
@@ -70,7 +70,7 @@ curl -X POST http://localhost:8000/search_with_images \
 Như trên nhưng không trả dữ liệu ảnh — nhanh hơn nhiều.
 
 ```bash
-curl -X POST http://localhost:8000/search \
+curl -X POST http://localhost:2005/search \
   -H "Content-Type: application/json" \
   -d '{"query": "限界状態", "user_id": "demo", "top_k": 3}'
 ```
@@ -82,7 +82,7 @@ curl -X POST http://localhost:8000/search \
 Lọc theo tên mục. Dùng chính với `noname` — mục chứa bìa và mục lục.
 
 ```bash
-curl -X POST http://localhost:8000/search_by_section_title \
+curl -X POST http://localhost:2005/search_by_section_title \
   -H "Content-Type: application/json" \
   -d '{"section_title": "noname", "user_id": "demo", "limit": 20}'
 ```
@@ -96,7 +96,7 @@ Chỉ hỗ trợ backend Qdrant; Milvus trả `501`.
 Upload và index nhiều PDF vào cùng collection. Mỗi file thành một "cuốn".
 
 ```bash
-curl -X POST http://localhost:8000/upload_files \
+curl -X POST http://localhost:2005/upload_files \
   -F "files=@quyen1.pdf" \
   -F "files=@quyen2.pdf" \
   -F "user_id=demo" \
@@ -119,7 +119,7 @@ Số phần tử `metadata` phải khớp số file. Sau khi xong, mục lục t
 Index một PDF đã có sẵn trên đĩa server.
 
 ```bash
-curl -X POST http://localhost:8000/index \
+curl -X POST http://localhost:2005/index \
   -H "Content-Type: application/json" \
   -d '{"pdf_path": "/data/pdf/quyen1.pdf", "user_id": "demo", "media_dir": "demo/0", "max_pages": 300}'
 ```
@@ -129,7 +129,7 @@ curl -X POST http://localhost:8000/index \
 ### `GET /table_of_contents`
 
 ```bash
-curl "http://localhost:8000/table_of_contents?collection_name=demo"
+curl "http://localhost:2005/table_of_contents?collection_name=demo"
 ```
 
 Trả mục lục tổng hợp của mọi cuốn trong collection. Dùng để nạp vào prompt cho agent biết knowledge base có gì.
@@ -141,7 +141,7 @@ Trả mục lục tổng hợp của mọi cuốn trong collection. Dùng để 
 ### `GET /list_collections/{user_id}`
 
 ```bash
-curl http://localhost:8000/list_collections/demo
+curl http://localhost:2005/list_collections/demo
 ```
 
 ---
@@ -157,7 +157,7 @@ curl http://localhost:8000/list_collections/demo
 ### `POST /upload_pdf/`
 
 ```bash
-curl -X POST http://localhost:8001/upload_pdf/ \
+curl -X POST http://localhost:2222/upload_pdf/ \
   -H "Content-Type: application/json" \
   -d '{"id": "demo/0", "pdf_path": "/data/pdf/quyen1.pdf", "custom_config": {"max_pages": 300, "vertical_split": true}}'
 ```
@@ -212,7 +212,7 @@ uvicorn backend.worker.main:app --port 8001
 pip install torch --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
 export METADATA_DIR=$PWD/../data/metadata OPENAI_API_KEY=EMPTY GEMINI_API_KEY=...
-export VECTORDB_URI=http://localhost:6333 PDF_WORKER_ENDPOINT=http://localhost:8001/upload_pdf/
+export VECTORDB_URI=http://localhost:6333 PDF_WORKER_ENDPOINT=http://localhost:2222/upload_pdf/
 uvicorn backend.app.main:app --port 8000
 ```
 
