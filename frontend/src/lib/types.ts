@@ -75,17 +75,6 @@ export interface HealthResponse {
   version: string;
 }
 
-/** Một lượt hỏi đáp trong phiên chat. */
-export interface ChatTurn {
-  id: string;
-  question: string;
-  answer: string | null;
-  sources: SearchResult[];
-  status: "pending" | "done" | "error";
-  error?: string;
-  /** Câu hỏi sau khi viết lại theo mục lục, nếu có. */
-  rewrittenQuery?: string;
-}
 
 export interface AskResponse {
   query: string;
@@ -94,4 +83,16 @@ export interface AskResponse {
   rewritten_query: string | null;
   sources: SearchResult[];
   total_sources: number;
+}
+
+/** Một lượt hỏi đáp trong phiên tra cứu. */
+export interface AskTurn {
+  id: string;
+  question: string;
+  answer: string;
+  sources: SearchResult[];
+  status: "pending" | "done" | "error";
+  error?: string;
+  /** Câu hỏi sau khi neo vào mục lục, nếu có. */
+  rewrittenQuery?: string;
 }

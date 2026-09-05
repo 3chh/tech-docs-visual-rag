@@ -1,51 +1,50 @@
-import { MessageSquare, Library, ListTree, Upload } from "lucide-react";
+import { FileStack, ListTree, Search } from "lucide-react";
 import { useState } from "react";
 
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Separator } from "@/components/ui/separator";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
-import { ChatPanel } from "@/features/chat/ChatPanel";
-import { LibraryPanel, OutlinePanel } from "@/features/library/LibraryPanel";
-import { UploadPanel } from "@/features/upload/UploadPanel";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AskPanel } from "@/features/ask";
+import { DocumentsPanel } from "@/features/documents/DocumentsPanel";
+import { OutlinePanel } from "@/features/outline/OutlinePanel";
 import { cn } from "@/lib/utils";
 
-const TABS = [
-  { id: "chat", label: "Hỏi đáp", icon: MessageSquare },
-  { id: "library", label: "Thư viện", icon: Library },
+/**
+ * Ba khu vực, xếp theo tần suất dùng: Tra cứu chiếm 90% thời gian nên là
+ * mặc định. Tài liệu gộp cả "xem đang có gì" và "thêm mới" vì đó là một việc.
+ */
+const AREAS = [
+  { id: "ask", label: "Tra cứu", icon: Search },
   { id: "outline", label: "Mục lục", icon: ListTree },
-  { id: "upload", label: "Tải lên", icon: Upload },
+  { id: "documents", label: "Tài liệu", icon: FileStack },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type AreaId = (typeof AREAS)[number]["id"];
 
 export default function App() {
   const [collection, setCollection] = useState("default");
-  const [tab, setTab] = useState<TabId>("chat");
+  const [area, setArea] = useState<AreaId>("ask");
 
   return (
     <SidebarProvider>
       <AppSidebar collection={collection} onCollectionChange={setCollection} />
 
       <SidebarInset className="flex h-svh min-w-0 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
-          <SidebarTrigger />
-          <Separator orientation="vertical" className="mr-1 h-5" />
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3">
+          <SidebarTrigger className="size-7" />
+          <Separator orientation="vertical" className="mr-1 !h-5" />
 
           <nav aria-label="Khu vực làm việc" className="flex items-center gap-0.5">
-            {TABS.map(({ id, label, icon: Icon }) => (
+            {AREAS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
-                onClick={() => setTab(id)}
-                aria-current={tab === id ? "page" : undefined}
+                onClick={() => setArea(id)}
+                aria-current={area === id ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  tab === id
+                  "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25",
+                  area === id
                     ? "bg-secondary font-medium text-secondary-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
@@ -56,27 +55,22 @@ export default function App() {
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1.5">
             <span className="hidden text-xs text-muted-foreground sm:inline">
-              đang xem
+              bộ tài liệu
             </span>
-            <span className="rounded-md bg-muted px-2 py-1 font-mono text-xs">
+            <span className="rounded-sm border bg-card px-1.5 py-0.5 font-mono text-xs">
               {collection}
             </span>
           </div>
         </header>
 
         <main className="min-h-0 flex-1 overflow-hidden">
-          {tab === "chat" && <ChatPanel collection={collection} />}
-          {tab === "library" && <LibraryPanel collection={collection} />}
-          {tab === "outline" && (
-            <div className="h-full overflow-auto">
-              <OutlinePanel collection={collection} />
-            </div>
-          )}
-          {tab === "upload" && (
-            <div className="h-full overflow-auto">
-              <UploadPanel collection={collection} />
+          {area === "ask" && <AskPanel collection={collection} />}
+          {area === "outline" && <OutlinePanel collection={collection} />}
+          {area === "documents" && (
+            <div className="h-full overflow-y-auto">
+              <DocumentsPanel collection={collection} />
             </div>
           )}
         </main>
