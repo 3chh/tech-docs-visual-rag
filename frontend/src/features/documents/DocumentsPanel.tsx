@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   BookMarked,
+  BookOpen,
   CheckCircle2,
   FileStack,
   Layers,
@@ -15,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTableOfContents, useUploadFiles } from "@/hooks/use-api";
 import type { ProcessingOverrides } from "@/features/settings/types";
 import { pruneEmpty } from "@/features/settings/types";
-import type { UploadFileMeta, UploadResponse } from "@/lib/types";
+import type { TocBook, UploadFileMeta, UploadResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import {
@@ -34,9 +35,11 @@ import {
 export function DocumentsPanel({
   collection,
   overrides,
+  onOpenBookInCanvas,
 }: {
   collection: string;
   overrides: ProcessingOverrides;
+  onOpenBookInCanvas?: (book: TocBook) => void;
 }) {
   const toc = useTableOfContents(collection);
   const upload = useUploadFiles();
@@ -218,18 +221,32 @@ export function DocumentsPanel({
         ) : (
           <ul className="divide-y rounded-md border bg-card">
             {books.map((book) => (
-              <li key={book.book_index} className="flex items-start gap-2.5 p-3">
-                <span className="mt-px flex size-4 shrink-0 items-center justify-center rounded-sm bg-muted font-mono text-xs tabular">
-                  {book.book_index}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[15px] font-medium leading-snug">
-                    {book.title ?? `Cuốn ${book.book_index}`}
-                  </p>
-                  <p className="mt-0.5 text-sm text-muted-foreground tabular">
-                    {book.total_sections} mục · {book.total_pages} trang
-                  </p>
+              <li key={book.book_index} className="flex items-center justify-between gap-3 p-3">
+                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                  <span className="mt-px flex size-5 shrink-0 items-center justify-center rounded-sm bg-muted font-mono text-xs tabular font-medium">
+                    {book.book_index}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] font-medium leading-snug truncate">
+                      {book.title ?? `Cuốn ${book.book_index}`}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground tabular">
+                      {book.total_sections} mục · {book.total_pages} trang
+                    </p>
+                  </div>
                 </div>
+
+                {onOpenBookInCanvas && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs font-medium shrink-0"
+                    onClick={() => onOpenBookInCanvas(book)}
+                  >
+                    <BookOpen className="size-3.5 text-primary" />
+                    <span>Xem trong Canvas</span>
+                  </Button>
+                )}
               </li>
             ))}
           </ul>

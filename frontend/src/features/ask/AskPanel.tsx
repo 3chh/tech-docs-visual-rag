@@ -1,15 +1,15 @@
-import { Search } from "lucide-react";
+import { Columns, Search, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/common";
-import { SourceView } from "@/features/source";
+import { Button } from "@/components/ui/button";
+import { DocumentCanvas } from "@/features/canvas";
+import type { AskOverrides } from "@/features/settings/types";
 import { api } from "@/lib/api";
-import { isMockMode, mockErrorTurn, mockTurns } from "@/lib/mock";
 import type { AskTurn, SearchResult } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 import { AnswerBlock } from "./AnswerBlock";
-import type { AskOverrides } from "@/features/settings/types";
-
 import { AskComposer } from "./AskComposer";
 
 const SAMPLE_QUESTIONS = [
@@ -18,29 +18,57 @@ const SAMPLE_QUESTIONS = [
   "Công thức tính ứng suất uốn ở mục nào?",
 ];
 
+interface AskPanelProps {
+  collection: string;
+  options: AskOverrides;
+  turns?: AskTurn[];
+  onUpdateTurns?: (updater: AskTurn[] | ((prev: AskTurn[]) => AskTurn[])) => void;
+  activeSource?: SearchResult | null;
+  onSelectSource?: (source: SearchResult | null) => void;
+}
+
 export function AskPanel({
   collection,
   options,
-}: {
-  collection: string;
-  options: AskOverrides;
-}) {
-  const [turns, setTurns] = useState<AskTurn[]>(() =>
-    isMockMode() ? [...mockTurns, mockErrorTurn] : [],
-  );
-  const [draft, setDraft] = useState("");
-  const [activeSource, setActiveSource] = useState<SearchResult | null>(() =>
-    isMockMode() ? (mockTurns[0]?.sources[0] ?? null) : null,
-  );
-  const [isBusy, setIsBusy] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  turns: controlledTurns,
+  onUpdateTurns,
+  activeSource: controlledActiveSource,
+  onSelectSource: controlledOnSelectSource,
+}: AskPanelProps) {
+  // Internal state fallback if not controlled from parent
+  const [internalTurns, setInternalTurns] = useState<AskTurn[]>([]);
+  const [internalActiveSource, setInternalActiveSource] = useState<SearchResult | null>(null);
 
-  // Đổi bộ tài liệu thì hội thoại cũ không còn ngữ cảnh.
-  useEffect(() => {
-    if (isMockMode()) return;
-    setTurns([]);
-    setActiveSource(null);
-  }, [collection]);
+  const turns = controlledTurns ?? internalTurns;
+  const setTurns = useCallback(
+    (updater: AskTurn[] | ((prev: AskTurn[]) => AskTurn[])) => {
+      if (onUpdateTurns) {
+        onUpdateTurns(updater);
+      } else {
+        setInternalTurns(updater);
+      }
+    },
+    [onUpdateTurns],
+  );
+
+  const activeSource =
+    controlledActiveSource !== undefined ? controlledActiveSource : internalActiveSource;
+  const setActiveSource = useCallback(
+    (source: SearchResult | null) => {
+      if (controlledOnSelectSource) {
+        controlledOnSelectSource(source);
+      } else {
+        setInternalActiveSource(source);
+      }
+    },
+    [controlledOnSelectSource],
+  );
+
+  const [draft, setDraft] = useState("");
+  const [isBusy, setIsBusy] = useState(false);
+  const [isCanvasOpen, setIsCanvasOpen] = useState(true);
+  const [isCanvasExpanded, setIsCanvasExpanded] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -84,7 +112,10 @@ export function AskPanel({
         ),
       );
 
-      if (response.sources.length > 0) setActiveSource(response.sources[0]);
+      if (response.sources.length > 0) {
+        setActiveSource(response.sources[0]);
+        setIsCanvasOpen(true);
+      }
     } catch (error) {
       setTurns((prev) =>
         prev.map((turn) =>
@@ -100,28 +131,67 @@ export function AskPanel({
     } finally {
       setIsBusy(false);
     }
-  }, [collection, draft, isBusy, options]);
+  }, [collection, draft, isBusy, options, setActiveSource, setTurns]);
+
+  function handlePickSource(source: SearchResult) {
+    setActiveSource(source);
+    setIsCanvasOpen(true);
+  }
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 w-full overflow-hidden bg-background">
+      {/* LEFT PANE: Chat Conversation & Composer */}
+      <div
+        className={cn(
+          "flex min-w-0 flex-col h-full transition-all duration-200 ease-in-out",
+          isCanvasOpen && !isCanvasExpanded
+            ? "w-full md:w-1/2 lg:w-[48%] border-r border-border"
+            : isCanvasExpanded
+            ? "hidden"
+            : "w-full",
+        )}
+      >
+        {/* Chat Header / Action Bar */}
+        <div className="flex h-11 shrink-0 items-center justify-between border-b bg-muted/20 px-4">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="size-2 rounded-full bg-primary animate-pulse" />
+            <span>Hỏi đáp trực quan theo trang gốc</span>
+          </div>
+
+          {!isCanvasOpen && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCanvasOpen(true)}
+              className="h-7 gap-1.5 text-xs text-primary font-medium"
+            >
+              <Columns className="size-3.5" />
+              <span>Mở Canvas tài liệu</span>
+            </Button>
+          )}
+        </div>
+
+        {/* Message Thread */}
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[48rem] space-y-8 px-6 py-6">
+          <div className="mx-auto w-full max-w-[46rem] space-y-8 px-5 py-6">
             {turns.length === 0 ? (
               <EmptyState
                 icon={Search}
-                title={`Tra cứu trong ${collection}`}
-                description="Hệ thống đọc trực tiếp ảnh trang tài liệu nên hiểu được cả bảng, công thức và hình vẽ. Câu trả lời luôn kèm số trang in để bạn đối chiếu với bản cứng."
+                title={`Tra cứu tài liệu trong ${collection}`}
+                description="Visual RAG đọc trực tiếp ảnh chụp trang gốc nên nắm bắt trọn vẹn cả bảng biểu, công thức toán và sơ đồ hình vẽ phức tạp. Mọi câu trả lời đều có trích dẫn trang đối soát."
                 action={
-                  <ul className="w-full max-w-md space-y-1.5">
+                  <ul className="w-full max-w-md space-y-2 mt-4">
                     {SAMPLE_QUESTIONS.map((question) => (
                       <li key={question}>
                         <button
                           type="button"
                           onClick={() => setDraft(question)}
-                          className="w-full rounded-md border bg-card px-3 py-2.5 text-left text-[15px] transition-colors hover:border-primary/40 hover:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25"
+                          className="w-full rounded-lg border bg-card px-3.5 py-2.5 text-left text-xs font-medium text-foreground transition-all hover:border-primary/50 hover:bg-accent hover:shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          {question}
+                          <span className="flex items-center gap-2">
+                            <Sparkles className="size-3 text-primary shrink-0" />
+                            <span>{question}</span>
+                          </span>
                         </button>
                       </li>
                     ))}
@@ -134,23 +204,44 @@ export function AskPanel({
                   key={turn.id}
                   turn={turn}
                   activeSourcePath={activeSource?.image_path}
-                  onPickSource={setActiveSource}
+                  onPickSource={handlePickSource}
                 />
               ))
             )}
           </div>
         </div>
 
+        {/* Composer Footer */}
         <AskComposer
           value={draft}
           onChange={setDraft}
           onSubmit={() => void ask()}
           isBusy={isBusy}
-          placeholder="Hỏi về nội dung tài liệu..."
+          placeholder="Đặt câu hỏi về công thức, thông số hoặc điều khoản trong tài liệu..."
         />
       </div>
 
-      <SourceView source={activeSource} onClose={() => setActiveSource(null)} />
+      {/* RIGHT PANE: Document Canvas Workspace */}
+      {isCanvasOpen && (
+        <div
+          className={cn(
+            "min-h-0 flex-col h-full bg-background transition-all duration-200 ease-in-out",
+            isCanvasExpanded ? "w-full flex" : "w-full md:w-1/2 lg:w-[52%] flex",
+          )}
+        >
+          <DocumentCanvas
+            source={activeSource}
+            collection={collection}
+            onClose={() => {
+              setIsCanvasOpen(false);
+              setIsCanvasExpanded(false);
+            }}
+            onSelectSource={setActiveSource}
+            isExpanded={isCanvasExpanded}
+            onToggleExpand={() => setIsCanvasExpanded((v) => !v)}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Lock, RotateCcw, Settings2, TriangleAlert } from "lucide-react";
+import { FileText, Lock, RotateCcw, Scissors, Search, Settings2, SlidersHorizontal, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -30,22 +30,23 @@ import {
 } from "./types";
 
 /**
- * Cấu hình chia theo ba loại, quyết định bởi *có đổi nóng được không*:
- *
- * 1. Đổi ngay, gửi kèm mỗi câu hỏi   -> tab Tra cứu
- * 2. Đổi ngay, gửi kèm mỗi lần upload -> tab Xử lý PDF
- * 3. Không đổi nóng được             -> hiện kèm LÝ DO cụ thể
- *
- * Loại 3 gồm ba trường hợp: model đã nạp VRAM, vector đã index theo tham số
- * đó, hoặc client đã kết nối theo tham số đó.
+ * Cấu hình chia theo danh mục với giao diện Sidebar dọc:
+ * 1. Tra cứu (Retrieval & VLM) -> gửi kèm mỗi câu hỏi
+ * 2. Xử lý PDF (DPI, Padding, OCR) -> gửi kèm mỗi lần upload
+ * 3. Cắt mục (Chunking & ToC) -> cấu hình trích xuất ToC
+ * 4. Cố định -> các tham số VRAM/Model/Database cố định
  */
+export interface SettingsDialogProps {
+  settings: StoredSettings;
+  onChange: (settings: StoredSettings) => void;
+  trigger?: React.ReactNode;
+}
+
 export function SettingsDialog({
   settings,
   onChange,
-}: {
-  settings: StoredSettings;
-  onChange: (settings: StoredSettings) => void;
-}) {
+  trigger,
+}: SettingsDialogProps) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["settings"],
     queryFn: api.settings,
@@ -60,53 +61,81 @@ export function SettingsDialog({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-1.5">
-          <Settings2 className="size-4" aria-hidden />
-          Cấu hình
-          {overrideCount > 0 && (
-            <span className="rounded-sm bg-primary/12 px-1.5 py-px font-mono text-xs text-primary tabular">
-              {overrideCount}
-            </span>
-          )}
-        </Button>
+        {trigger ?? (
+          <Button variant="ghost" size="sm" className="gap-1.5">
+            <Settings2 className="size-4" aria-hidden />
+            Cấu hình
+            {overrideCount > 0 && (
+              <span className="rounded-sm bg-primary/12 px-1.5 py-px font-mono text-xs text-primary tabular">
+                {overrideCount}
+              </span>
+            )}
+          </Button>
+        )}
       </DialogTrigger>
 
-      <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
-        <DialogHeader className="shrink-0 border-b px-5 py-4">
-          <DialogTitle>Cấu hình</DialogTitle>
+      <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
+          <DialogTitle className="flex items-center gap-2">
+            <SlidersHorizontal className="size-5 text-primary" />
+            Cấu hình Hệ thống
+          </DialogTitle>
           <DialogDescription>
-            Tham số đổi ở đây áp dụng cho lần tra cứu và lần tải tài liệu tiếp theo.
-            Lưu trên máy bạn, không đổi cấu hình của người khác.
+            Tham số áp dụng cho phiên làm việc của bạn. Lưu cục bộ trên trình duyệt, không ảnh hưởng người dùng khác.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="ask" className="min-h-0 flex-1 gap-0">
-          <TabsList className="mx-5 mt-4 w-auto shrink-0">
-            <TabsTrigger value="ask">Tra cứu</TabsTrigger>
-            <TabsTrigger value="pdf">Xử lý PDF</TabsTrigger>
-            <TabsTrigger value="chunk">Cắt mục</TabsTrigger>
-            <TabsTrigger value="locked">Cố định</TabsTrigger>
+        <Tabs defaultValue="ask" orientation="vertical" className="flex min-h-0 flex-1 flex-row gap-0 overflow-hidden">
+          <TabsList className="flex w-52 shrink-0 flex-col items-stretch justify-start gap-1 rounded-none border-r bg-muted/25 p-3">
+            <TabsTrigger
+              value="ask"
+              className="flex w-full items-center justify-start gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            >
+              <Search className="size-4 text-muted-foreground" />
+              Tra cứu & VLM
+            </TabsTrigger>
+            <TabsTrigger
+              value="pdf"
+              className="flex w-full items-center justify-start gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            >
+              <FileText className="size-4 text-muted-foreground" />
+              Xử lý PDF
+            </TabsTrigger>
+            <TabsTrigger
+              value="chunk"
+              className="flex w-full items-center justify-start gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            >
+              <Scissors className="size-4 text-muted-foreground" />
+              Cắt mục ToC
+            </TabsTrigger>
+            <TabsTrigger
+              value="locked"
+              className="flex w-full items-center justify-start gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            >
+              <Lock className="size-4 text-muted-foreground" />
+              Tham số cố định
+            </TabsTrigger>
           </TabsList>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             {isLoading && <LoadingRows />}
             {isError && <BackendOffline />}
 
             {data && (
               <>
-                <TabsContent value="ask" className="mt-0 space-y-6">
+                <TabsContent value="ask" className="mt-0 space-y-6 focus-visible:outline-none">
                   <AskTab data={data} settings={settings} onChange={onChange} />
                 </TabsContent>
 
-                <TabsContent value="pdf" className="mt-0 space-y-6">
+                <TabsContent value="pdf" className="mt-0 space-y-6 focus-visible:outline-none">
                   <PdfTab data={data} settings={settings} onChange={onChange} />
                 </TabsContent>
 
-                <TabsContent value="chunk" className="mt-0 space-y-6">
+                <TabsContent value="chunk" className="mt-0 space-y-6 focus-visible:outline-none">
                   <ChunkTab data={data} settings={settings} onChange={onChange} />
                 </TabsContent>
 
-                <TabsContent value="locked" className="mt-0 space-y-6">
+                <TabsContent value="locked" className="mt-0 space-y-6 focus-visible:outline-none">
                   <LockedTab data={data} />
                 </TabsContent>
               </>

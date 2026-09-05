@@ -1,0 +1,1 @@
+export { DocumentCanvas } from "./DocumentCanvas";
