@@ -50,3 +50,8 @@ models_cache/
 # Log
 logs/
 *.log
+
+# Frontend build
+node_modules/
+dist/
+.vite/

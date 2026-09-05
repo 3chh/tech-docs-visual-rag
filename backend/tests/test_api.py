@@ -34,6 +34,7 @@ def test_health(client):
         # Endpoint tương thích ngược với client cũ
         ("/search_default", "post"),
         ("/search_default_base64", "post"),
+        ("/ask", "post"),
     ],
 )
 def test_endpoint_ton_tai(client, path, method):
@@ -106,5 +107,27 @@ def test_toc_doc_duoc_sau_khi_sinh(client, api_env):
 def test_query_rong_bi_tu_choi(client):
     """top_k ngoài khoảng cho phép phải bị validate chặn."""
     response = client.post("/search", json={"query": "test", "user_id": "x", "top_k": 0})
+
+    assert response.status_code == 422
+
+
+def test_ask_endpoint_ton_tai(client):
+    """VLM chạy phía backend nên frontend không giữ API key."""
+    schema = client.app.openapi()
+
+    assert "/ask" in schema["paths"]
+    assert "post" in schema["paths"]["/ask"]
+
+
+def test_ask_response_co_cau_hoi_da_viet_lai(client):
+    schema = client.app.openapi()
+    props = schema["components"]["schemas"]["AskResponse"]["properties"]
+
+    for field in ("query", "answer", "rewritten_query", "sources", "total_sources"):
+        assert field in props, f"AskResponse thiếu field {field}"
+
+
+def test_ask_tu_choi_query_rong(client):
+    response = client.post("/ask", json={"query": "", "user_id": "x"})
 
     assert response.status_code == 422

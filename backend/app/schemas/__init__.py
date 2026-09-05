@@ -1,3 +1,4 @@
+from .chat import AskRequest, AskResponse
 from .common import HealthResponse
 from .indexing import (
     CollectionListResponse,
@@ -14,6 +15,8 @@ from .search import (
 )
 
 __all__ = [
+    "AskRequest",
+    "AskResponse",
     "HealthResponse",
     "CollectionListResponse",
     "IndexRequest",

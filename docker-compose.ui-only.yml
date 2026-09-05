@@ -1,12 +1,12 @@
-# Chỉ chạy giao diện + vector DB, không nạp model nào.
+# Chỉ chạy giao diện + Qdrant, không nạp model nào.
 #
 #   make up-ui
 #
 # Dùng khi muốn xem giao diện, kiểm tra build, hoặc phát triển frontend mà
-# chưa có GPU. Frontend sẽ hiện banner "backend không kết nối được" — đúng
-# như mong đợi vì backend không chạy.
+# chưa có GPU. Giao diện sẽ báo mất kết nối backend — đúng như mong đợi vì
+# backend không chạy ở chế độ này.
 #
-# Không cần GEMINI_API_KEY ở chế độ này.
+# Không cần GEMINI_API_KEY.
 
 services:
   vllm:
@@ -22,9 +22,5 @@ services:
       replicas: 0
 
   frontend:
-    # Bỏ depends_on backend để frontend lên được một mình.
+    # Bỏ depends_on để frontend lên được một mình.
     depends_on: !reset []
-    volumes: !override []
-    environment:
-      BACKEND_URL: http://backend:8000
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}

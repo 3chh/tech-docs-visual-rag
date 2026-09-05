@@ -161,19 +161,18 @@ services:
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-7860}:7860"
-    volumes:
-      # Chỉ đọc: frontend cần đường dẫn ảnh-mục để hiển thị.
-      - app-data:/data:ro
     depends_on:
       backend:
         condition: service_started
-    environment:
-      BACKEND_URL: http://backend:8000
-      FRONTEND_SEARCH_TIMEOUT: ${FRONTEND_SEARCH_TIMEOUT:-1000}
-      VLM_ENDPOINT: http://vllm:8000/v1
-      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    # Không cần biến môi trường hay volume: đây là static file do nginx serve,
+    # mọi lệnh gọi API đi qua proxy /api sang backend. Ảnh-mục về dưới dạng
+    # base64 trong response nên frontend không cần đọc volume /data.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7860/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
 volumes:
   qdrant-data:

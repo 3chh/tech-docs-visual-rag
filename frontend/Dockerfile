@@ -1,29 +1,25 @@
-# Frontend chỉ gọi HTTP nên dùng base slim, không cần CUDA.
-FROM python:3.11-slim
+# --- Tầng build ---
+FROM node:22-alpine AS build
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+WORKDIR /app
 
-WORKDIR /srv
+# Copy manifest riêng để tận dụng cache: deps chỉ cài lại khi manifest đổi.
+COPY package.json package-lock.json* ./
+RUN npm ci --no-audit --no-fund
 
-RUN groupadd --gid 1000 app && \
-    useradd --uid 1000 --gid app --create-home app
+COPY . .
+RUN npm run build
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# --- Tầng chạy ---
+FROM nginx:1.27-alpine
 
-COPY --chown=app:app . ./frontend/
-RUN touch /srv/__init__.py && chown app:app /srv/__init__.py
-
-USER app
-
-ENV GRADIO_SERVER_NAME=0.0.0.0 \
-    FRONTEND_PORT=7860
+RUN rm /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/app.conf
+COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 7860
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:7860/').read()" || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:7860/healthz || exit 1
 
-CMD ["python", "-m", "frontend.app.main"]
+CMD ["nginx", "-g", "daemon off;"]

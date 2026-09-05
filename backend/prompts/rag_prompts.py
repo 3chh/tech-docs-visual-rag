@@ -115,3 +115,20 @@ rag_prompt = """あなたは日本語で書かれた構造設計基準の技術�
 5. 文書内に根拠が見つからない場合は、その旨を明確に伝え、曖昧な推測は避けてください。
 
 目的は、ユーザーの質問に対し、文書の情報に忠実かつ明示的に根拠を示した技術的な回答を行うことです。"""
+
+# Viết lại câu hỏi dựa trên ảnh bìa + mục lục của corpus.
+# Neo vào mục lục thật thay vì kiến thức chung của LLM, tránh bịa thuật ngữ
+# không tồn tại trong tài liệu.
+toc_rewrite_system_prompt = (
+    "Rewrite the query in Japanese to be more specific and accurate based on all "
+    "the images of preview contents of all the knowledge sources. "
+    "Place the rewritten query in the tag <query>...</query>."
+)
+
+
+def build_toc_rewrite_prompt(query: str) -> str:
+    return (
+        f"Rewrite this query: {query} in Japanese based on the following images "
+        f"of preview contents of all the knowledge sources. "
+        f"Place the rewritten query in the tag <query>...</query>."
+    )
