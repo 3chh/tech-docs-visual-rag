@@ -98,6 +98,8 @@ export const api = {
     topK?: number;
     useTocRewrite?: boolean;
     systemPrompt?: string;
+    tocPreviewLimit?: number;
+    vlmTemperature?: number;
   }): Promise<AskResponse> {
     return postJson<AskResponse>(
       "/ask",
@@ -108,6 +110,8 @@ export const api = {
         use_toc_rewrite: params.useTocRewrite ?? true,
         system_prompt: params.systemPrompt ?? "",
         include_base64: true,
+        toc_preview_limit: params.tocPreviewLimit,
+        vlm_temperature: params.vlmTemperature,
       },
       SEARCH_TIMEOUT_MS,
     );

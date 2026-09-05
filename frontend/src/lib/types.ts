@@ -58,6 +58,8 @@ export interface UploadFileMeta {
   original_name?: string;
   vertical_split: boolean;
   max_pages?: number | null;
+  /** Override tham số xử lý, khớp ProcessingOverrides ở backend. */
+  [key: string]: unknown;
 }
 
 export interface UploadResponse {

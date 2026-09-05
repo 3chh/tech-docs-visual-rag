@@ -31,6 +31,8 @@ async def ask(request: AskRequest) -> AskResponse:
             top_k=request.top_k,
             system_prompt=request.system_prompt,
             use_toc_rewrite=request.use_toc_rewrite,
+            toc_preview_limit=request.toc_preview_limit,
+            vlm_temperature=request.vlm_temperature,
         )
 
         sources = [

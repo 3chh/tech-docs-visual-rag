@@ -7,11 +7,6 @@ import { cn } from "@/lib/utils";
 
 const MAX_TEXTAREA_HEIGHT = 180;
 
-export interface AskOptions {
-  topK: number;
-  useTocRewrite: boolean;
-}
-
 /**
  * Khung nhập câu hỏi. Chỉ có ô nhập và nút gửi.
  *

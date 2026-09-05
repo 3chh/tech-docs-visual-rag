@@ -13,6 +13,8 @@ import { EmptyState, SectionHeading, StatTile } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTableOfContents, useUploadFiles } from "@/hooks/use-api";
+import type { ProcessingOverrides } from "@/features/settings/types";
+import { pruneEmpty } from "@/features/settings/types";
 import type { UploadFileMeta, UploadResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +31,13 @@ import {
  * Tách hai việc này thành hai tab là chia theo endpoint, không theo công việc:
  * người dùng tải lên xong muốn thấy kết quả ngay tại đây.
  */
-export function DocumentsPanel({ collection }: { collection: string }) {
+export function DocumentsPanel({
+  collection,
+  overrides,
+}: {
+  collection: string;
+  overrides: ProcessingOverrides;
+}) {
   const toc = useTableOfContents(collection);
   const upload = useUploadFiles();
   const [queue, setQueue] = useState<QueuedFile[]>([]);
@@ -58,11 +66,16 @@ export function DocumentsPanel({ collection }: { collection: string }) {
   function submit() {
     if (!queue.length) return;
 
+    // Gửi kèm override từ Cấu hình. pruneEmpty bỏ khoá rỗng để backend
+    // chỉ nhận cái người dùng đổi thật, phần còn lại dùng mặc định server.
+    const processing = pruneEmpty(overrides) ?? {};
+
     const metadata: UploadFileMeta[] = queue.map((item) => ({
       display_name: item.displayName || item.file.name,
       original_name: item.file.name,
       vertical_split: item.verticalSplit,
       max_pages: item.maxPages,
+      ...processing,
     }));
 
     upload.mutate(
@@ -149,6 +162,12 @@ export function DocumentsPanel({ collection }: { collection: string }) {
               />
             ))}
           </div>
+
+          {Object.keys(pruneEmpty(overrides) ?? {}).length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Đang áp cấu hình xử lý tuỳ chỉnh từ mục Cấu hình.
+            </p>
+          )}
 
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={submit} disabled={isBusy}>

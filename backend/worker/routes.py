@@ -47,7 +47,9 @@ class UploadResponse(BaseModel):
 async def upload_pdf(request: UploadRequest) -> UploadResponse:
     """Xử lý một PDF thành các ảnh-mục.
 
-    `custom_config` nhận `max_pages` và `vertical_split`.
+    `custom_config` nhận gói ProcessingOverrides: max_pages, vertical_split,
+    preprocess, layout, ocr, chunking, toc_validator. Xem
+    app/schemas/overrides.py để biết cái gì override được và vì sao.
     """
     logger.info(
         "Xử lý PDF | id=%s path=%s config=%s",

@@ -14,6 +14,8 @@ Bước 5 tách riêng để bước 7 không phải chạy lại model — đó
 """
 
 import json
+from contextlib import contextmanager
+from copy import deepcopy
 import os
 import shutil
 from pathlib import Path
@@ -171,7 +173,11 @@ class PdfManager:
         custom_config: dict = None,
         draw_debug: bool = False,
     ) -> List[dict]:
-        """Chạy toàn bộ pipeline, trả metadata của từng ảnh-mục."""
+        """Chạy toàn bộ pipeline, trả metadata của từng ảnh-mục.
+
+        `custom_config` override tham số cho riêng lần chạy này. Xem
+        `_apply_overrides` để biết cái gì override được và vì sao.
+        """
         custom_config = custom_config or {}
         max_pages = custom_config.get("max_pages")
         do_vertical_split = custom_config.get("vertical_split", True)
@@ -180,6 +186,92 @@ class PdfManager:
         output_folder = str(metadata_dir() / str(output_dir))
         self._clear_and_recreate_dir(output_folder)
 
+        with self._overrides(custom_config):
+            return self._run_pipeline(
+                output_folder, pdf_path, max_pages, do_vertical_split, draw_debug
+            )
+
+    @contextmanager
+    def _overrides(self, custom_config: dict):
+        """Áp override cho một lần chạy rồi trả lại giá trị cũ.
+
+        PdfManager là singleton nên phải phục hồi, nếu không lần xử lý sau sẽ
+        thừa hưởng tham số của lần trước.
+
+        Chỉ override được thứ đọc lại mỗi lần chạy hoặc là thuộc tính số đơn
+        giản. Tên model không override được vì model đã nạp vào VRAM.
+        """
+        saved: list[tuple[object, str, object]] = []
+
+        def override(target: object, attr: str, value):
+            saved.append((target, attr, getattr(target, attr)))
+            setattr(target, attr, value)
+
+        # Config đọc lại ở mỗi lần gọi process_pdf_to_image_and_cut_padding
+        original_config = self.config
+        merged = deepcopy(self.config)
+
+        pre = custom_config.get("preprocess") or {}
+        if pre:
+            target = merged.setdefault("preprocess_pdf", {})
+            for key in ("padding", "use_cut_padding", "batch_size", "cut_params"):
+                if pre.get(key) is not None:
+                    target[key] = pre[key]
+            img = pre.get("pdf_to_image") or {}
+            if img:
+                img_target = target.setdefault("pdf_to_image", {})
+                for key in ("dpi", "min_dpi", "anchor_size", "thread_count"):
+                    if img.get(key) is not None:
+                        img_target[key] = img[key]
+
+        self.config = merged
+
+        layout = custom_config.get("layout") or {}
+        if layout.get("batch_size") is not None:
+            override(self.element_detector, "batch_size", layout["batch_size"])
+
+        ocr = custom_config.get("ocr") or {}
+        for key in ("title_batch_size", "number_batch_size", "formula_batch_size"):
+            if ocr.get(key) is not None:
+                override(self.summary_reporter, key, ocr[key])
+
+        chunking = custom_config.get("chunking") or {}
+        if chunking.get("cut_padding") is not None:
+            override(self.section_merger, "cut_padding", chunking["cut_padding"])
+        if chunking.get("min_section_height_px") is not None:
+            # Ngưỡng nằm ở module llm_report_valid, không phải thuộc tính
+            # instance, nên set qua chính module đó.
+            from . import llm_report_valid
+
+            override(
+                llm_report_valid,
+                "MIN_SECTION_HEIGHT_PX",
+                chunking["min_section_height_px"],
+            )
+
+        toc = custom_config.get("toc_validator") or {}
+        for key in ("model_name", "temperature"):
+            if toc.get(key) is not None:
+                override(self.report_validator, key, toc[key])
+
+        if custom_config:
+            logger.info("Áp override cho lần chạy này: %s", custom_config)
+
+        try:
+            yield
+        finally:
+            self.config = original_config
+            for target, attr, value in saved:
+                setattr(target, attr, value)
+
+    def _run_pipeline(
+        self,
+        output_folder: str,
+        pdf_path: Optional[str],
+        max_pages: Optional[int],
+        do_vertical_split: bool,
+        draw_debug: bool,
+    ) -> List[dict]:
         self.process(output_folder, pdf_path, max_pages, do_vertical_split, draw_debug)
 
         logger.info("Bước 6: LLM kiểm tra và sửa cây mục lục")

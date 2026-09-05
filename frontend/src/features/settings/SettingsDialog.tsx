@@ -1,49 +1,50 @@
 import { useQuery } from "@tanstack/react-query";
-import { Info, Lock, Settings2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { Lock, RotateCcw, Settings2, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { AskOptions } from "@/features/ask/AskComposer";
 import { api } from "@/lib/api";
+import type { SettingsResponse } from "@/lib/types";
 
-const TOP_K_OPTIONS = [3, 5, 8, 12, 16, 20];
+import {
+  BoolSetting,
+  LockedSetting,
+  NumberSetting,
+  SettingGroup,
+  TextSetting,
+} from "./SettingRow";
+import {
+  DEFAULT_SETTINGS,
+  LIMITS,
+  type StoredSettings,
+} from "./types";
 
 /**
- * Cấu hình hệ thống, chia theo *ai đổi được và khi nào*:
+ * Cấu hình chia theo ba loại, quyết định bởi *có đổi nóng được không*:
  *
- * - Tra cứu  : UI đổi ngay, gửi kèm mỗi câu hỏi
- * - Xử lý PDF: đổi qua biến môi trường, cần khởi động lại worker
- * - Chỉ mục  : embedding và vector DB, cần khởi động lại backend
- * - Model    : VLM và LLM
+ * 1. Đổi ngay, gửi kèm mỗi câu hỏi   -> tab Tra cứu
+ * 2. Đổi ngay, gửi kèm mỗi lần upload -> tab Xử lý PDF
+ * 3. Không đổi nóng được             -> hiện kèm LÝ DO cụ thể
  *
- * Ba nhóm sau chỉ đọc vì model đã nạp vào VRAM theo tham số cũ; đổi nóng sẽ
- * làm vector đã index không so được với vector mới.
+ * Loại 3 gồm ba trường hợp: model đã nạp VRAM, vector đã index theo tham số
+ * đó, hoặc client đã kết nối theo tham số đó.
  */
 export function SettingsDialog({
-  options,
-  onOptionsChange,
+  settings,
+  onChange,
 }: {
-  options: AskOptions;
-  onOptionsChange: (options: AskOptions) => void;
+  settings: StoredSettings;
+  onChange: (settings: StoredSettings) => void;
 }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["settings"],
@@ -52,462 +53,588 @@ export function SettingsDialog({
     retry: false,
   });
 
+  const overrideCount =
+    countOverrides(settings.ask, DEFAULT_SETTINGS.ask) +
+    countNested(settings.processing);
+
   return (
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="gap-1.5">
           <Settings2 className="size-4" aria-hidden />
           Cấu hình
+          {overrideCount > 0 && (
+            <span className="rounded-sm bg-primary/12 px-1.5 py-px font-mono text-xs text-primary tabular">
+              {overrideCount}
+            </span>
+          )}
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="max-h-[85dvh] gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b px-5 py-4">
+      <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <DialogHeader className="shrink-0 border-b px-5 py-4">
           <DialogTitle>Cấu hình</DialogTitle>
           <DialogDescription>
-            Tham số tra cứu đổi được ngay. Tham số xử lý và chỉ mục đọc từ biến môi
-            trường, đổi cần khởi động lại service.
+            Tham số đổi ở đây áp dụng cho lần tra cứu và lần tải tài liệu tiếp theo.
+            Lưu trên máy bạn, không đổi cấu hình của người khác.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="runtime" className="min-h-0 gap-0">
-          <TabsList className="mx-5 mt-4 w-auto">
-            <TabsTrigger value="runtime">Tra cứu</TabsTrigger>
-            <TabsTrigger value="document">Xử lý PDF</TabsTrigger>
-            <TabsTrigger value="indexing">Chỉ mục</TabsTrigger>
-            <TabsTrigger value="models">Model</TabsTrigger>
+        <Tabs defaultValue="ask" className="min-h-0 flex-1 gap-0">
+          <TabsList className="mx-5 mt-4 w-auto shrink-0">
+            <TabsTrigger value="ask">Tra cứu</TabsTrigger>
+            <TabsTrigger value="pdf">Xử lý PDF</TabsTrigger>
+            <TabsTrigger value="chunk">Cắt mục</TabsTrigger>
+            <TabsTrigger value="locked">Cố định</TabsTrigger>
           </TabsList>
 
-          <div className="max-h-[55dvh] overflow-y-auto px-5 py-4">
-            <TabsContent value="runtime" className="mt-0">
-              <RuntimeTab options={options} onChange={onOptionsChange} data={data} />
-            </TabsContent>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            {isLoading && <LoadingRows />}
+            {isError && <BackendOffline />}
 
-            <TabsContent value="document" className="mt-0 space-y-5">
-              {isLoading && <LoadingRows />}
-              {isError && <BackendOffline />}
-              {data && <DocumentTab data={data} />}
-            </TabsContent>
+            {data && (
+              <>
+                <TabsContent value="ask" className="mt-0 space-y-6">
+                  <AskTab data={data} settings={settings} onChange={onChange} />
+                </TabsContent>
 
-            <TabsContent value="indexing" className="mt-0 space-y-5">
-              {isLoading && <LoadingRows />}
-              {isError && <BackendOffline />}
-              {data && <IndexingTab data={data} />}
-            </TabsContent>
+                <TabsContent value="pdf" className="mt-0 space-y-6">
+                  <PdfTab data={data} settings={settings} onChange={onChange} />
+                </TabsContent>
 
-            <TabsContent value="models" className="mt-0 space-y-5">
-              {isLoading && <LoadingRows />}
-              {isError && <BackendOffline />}
-              {data && <ModelsTab data={data} />}
-            </TabsContent>
+                <TabsContent value="chunk" className="mt-0 space-y-6">
+                  <ChunkTab data={data} settings={settings} onChange={onChange} />
+                </TabsContent>
+
+                <TabsContent value="locked" className="mt-0 space-y-6">
+                  <LockedTab data={data} />
+                </TabsContent>
+              </>
+            )}
           </div>
         </Tabs>
+
+        <DialogFooter className="shrink-0 justify-between border-t px-5 py-3 sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            {overrideCount > 0
+              ? `${overrideCount} tham số đã đổi khỏi mặc định`
+              : "Đang dùng toàn bộ giá trị mặc định"}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={overrideCount === 0}
+            onClick={() => onChange(DEFAULT_SETTINGS)}
+          >
+            <RotateCcw className="size-3.5" aria-hidden />
+            Trả về mặc định
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-/* ---------- Nhóm 1: đổi được ngay ---------- */
+/* ---------- Tab 1: gửi kèm mỗi câu hỏi ---------- */
 
-function RuntimeTab({
-  options,
-  onChange,
+function AskTab({
   data,
+  settings,
+  onChange,
 }: {
-  options: AskOptions;
-  onChange: (options: AskOptions) => void;
-  data?: import("@/lib/types").SettingsResponse;
+  data: SettingsResponse;
+  settings: StoredSettings;
+  onChange: (s: StoredSettings) => void;
 }) {
-  const max = data?.runtime.top_k_max ?? 20;
-  const allowed = TOP_K_OPTIONS.filter((n) => n <= max);
-
-  return (
-    <div className="space-y-5">
-      <Group title="Truy xuất">
-        <Row
-          label="Số mục lấy về"
-          hint="Càng nhiều càng chậm vì VLM phải đọc nhiều ảnh hơn"
-          control={
-            <Select
-              value={String(options.topK)}
-              onValueChange={(next) => onChange({ ...options, topK: Number(next) })}
-            >
-              <SelectTrigger size="sm" className="w-24 font-mono tabular">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {allowed.map((n) => (
-                  <SelectItem key={n} value={String(n)} className="font-mono tabular">
-                    {n}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
-        />
-
-        <Row
-          label="Chuẩn hoá thuật ngữ theo mục lục"
-          hint="Cho VLM đọc ảnh bìa và mục lục rồi viết lại câu hỏi bằng thuật ngữ có thật trong tài liệu. Tắt đi sẽ nhanh hơn một lượt gọi model"
-          control={
-            <Switch
-              checked={options.useTocRewrite}
-              onCheckedChange={(checked) =>
-                onChange({ ...options, useTocRewrite: checked })
-              }
-            />
-          }
-        />
-
-        {data && (
-          <ReadOnlyRow
-            label="Số ảnh mục lục dùng để chuẩn hoá"
-            value={data.runtime.toc_preview_limit}
-            envVar="—"
-          />
-        )}
-      </Group>
-    </div>
-  );
-}
-
-/* ---------- Nhóm 2: xử lý PDF ---------- */
-
-function DocumentTab({ data }: { data: import("@/lib/types").SettingsResponse }) {
-  const d = data.document;
-  const p = d.preprocess;
-  const img = p.pdf_to_image;
+  const ask = settings.ask;
+  const set = (patch: Partial<typeof ask>) =>
+    onChange({ ...settings, ask: { ...ask, ...patch } });
 
   return (
     <>
-      <ReadOnlyNote />
+      <SettingGroup
+        title="Truy xuất"
+        description="Áp dụng ngay cho câu hỏi tiếp theo, không cần khởi động lại."
+      >
+        <NumberSetting
+          label="Số mục lấy về"
+          hint="Càng nhiều càng chậm vì VLM phải đọc nhiều ảnh hơn"
+          value={ask.topK}
+          defaultValue={data.runtime.top_k_default}
+          min={LIMITS.top_k.min}
+          max={LIMITS.top_k.max}
+          onChange={(v) => set({ topK: v ?? data.runtime.top_k_default })}
+        />
 
-      <Group title="PDF sang ảnh">
-        <ReadOnlyRow
-          label="DPI mục tiêu"
-          value={img.dpi}
-          hint="DPI thực tế tính động theo khổ trang để mọi sách ra ảnh có cùng lượng pixel"
-          envVar="—"
+        <BoolSetting
+          label="Chuẩn hoá thuật ngữ theo mục lục"
+          hint="Cho VLM đọc ảnh bìa và mục lục rồi viết lại câu hỏi bằng thuật ngữ có thật trong tài liệu. Tắt đi nhanh hơn một lượt gọi model"
+          value={ask.useTocRewrite}
+          defaultValue={data.runtime.use_toc_rewrite_default}
+          onChange={(v) =>
+            set({ useTocRewrite: v ?? data.runtime.use_toc_rewrite_default })
+          }
         />
-        <ReadOnlyRow label="DPI tối thiểu" value={img.min_dpi} envVar="—" />
-        <ReadOnlyRow
-          label="Số pixel chuẩn hoá"
-          value={img.anchor_size.toLocaleString("vi-VN")}
-          hint="Mốc để tính DPI động: anchor / (rộng × cao) × dpi"
-          envVar="—"
-        />
-        <ReadOnlyRow label="Số luồng render" value={img.thread_count} envVar="—" />
-        <ReadOnlyRow
-          label="Tách đôi trang (mặc định)"
-          value={img.vertical_split}
-          hint="Đổi được cho từng file lúc tải lên"
-          envVar="—"
-        />
-      </Group>
 
-      <Group title="Cắt lề">
-        <ReadOnlyRow label="Bật cắt lề" value={p.use_cut_padding} envVar="—" />
-        <ReadOnlyRow
-          label="Lề chừa lại"
-          value={`${p.padding} px`}
-          hint="Bỏ lề trắng là bỏ visual token vô nghĩa"
-          envVar="—"
+        <NumberSetting
+          label="Số ảnh mục lục dùng để chuẩn hoá"
+          hint="Nhiều hơn thì chuẩn hoá sát hơn nhưng tốn thêm visual token"
+          value={ask.tocPreviewLimit}
+          defaultValue={data.runtime.toc_preview_limit}
+          min={LIMITS.toc_preview_limit.min}
+          max={LIMITS.toc_preview_limit.max}
+          onChange={(v) => set({ tocPreviewLimit: v })}
         />
-        <ReadOnlyRow
-          label="Cắt cứng [trên, dưới, trái, phải]"
-          value={`[${p.cut_params.join(", ")}]`}
-          envVar="—"
-        />
-        <ReadOnlyRow label="Model dò chữ" value={p.text_model} mono envVar="—" />
-        <ReadOnlyRow label="Batch size" value={p.batch_size} envVar="—" />
-      </Group>
 
-      <Group title="Nhận diện bố cục">
-        <ReadOnlyRow label="Model" value={d.layout.model_name} mono envVar="—" />
-        <ReadOnlyRow label="Batch size" value={d.layout.batch_size} envVar="—" />
-      </Group>
-
-      <Group title="OCR">
-        <ReadOnlyRow label="Batch tiêu đề" value={d.ocr.title_batch_size} envVar="—" />
-        <ReadOnlyRow label="Batch số trang" value={d.ocr.number_batch_size} envVar="—" />
-        <ReadOnlyRow label="Batch công thức" value={d.ocr.formula_batch_size} envVar="—" />
-        <ReadOnlyRow label="Nạp model trễ" value={d.ocr.lazy_load} envVar="—" />
-      </Group>
-
-      <Group title="Cắt mục (chunking)">
-        <ReadOnlyRow
-          label="Lề cắt số trang"
-          value={`${d.chunking.cut_padding} px`}
-          hint="Cắt bỏ chân trang trước khi ghép ảnh-mục"
-          envVar="—"
+        <NumberSetting
+          label="Temperature của VLM"
+          hint="0 cho câu trả lời ổn định nhất. Tài liệu kỹ thuật nên để thấp"
+          value={ask.vlmTemperature}
+          defaultValue={0}
+          min={LIMITS.temperature.min}
+          max={LIMITS.temperature.max}
+          step={LIMITS.temperature.step}
+          onChange={(v) => set({ vlmTemperature: v })}
         />
-        <ReadOnlyRow
-          label="Bỏ số trang khỏi ảnh ghép"
-          value={d.chunking.remove_page_number}
-          envVar="—"
-        />
-        <ReadOnlyRow
-          label="Giữ ảnh từng trang gốc"
-          value={d.chunking.keep_chunk_pages}
-          hint="Dùng để đối chiếu với bản in"
-          envVar="—"
-        />
-        <ReadOnlyRow
-          label="Chiều cao mục tối thiểu"
-          value={`${d.chunking.min_section_height_px} px`}
-          hint="Mục thấp hơn ngưỡng coi như chỉ có tiêu đề, gộp vào mục trước"
-          envVar="—"
-        />
-      </Group>
-
-      <Group title="LLM sửa cây mục lục">
-        <ReadOnlyRow label="Nhà cung cấp" value={d.toc_validator.type} envVar="TOC_VALIDATOR_TYPE" />
-        <ReadOnlyRow
-          label="Model"
-          value={d.toc_validator.model_name}
-          mono
-          envVar="TOC_VALIDATOR_MODEL_NAME"
-        />
-        <ReadOnlyRow
-          label="Endpoint"
-          value={d.toc_validator.endpoint}
-          mono
-          envVar="TOC_VALIDATOR_ENDPOINT"
-        />
-        <ReadOnlyRow
-          label="Temperature"
-          value={d.toc_validator.temperature}
-          envVar="TOC_VALIDATOR_TEMPERATURE"
-        />
-        <ReadOnlyRow
-          label="API key"
-          value={d.toc_validator.api_key_configured ? "đã cấu hình" : "chưa có"}
-          envVar="GEMINI_API_KEY"
-        />
-      </Group>
-
-      <Group title="Worker">
-        <ReadOnlyRow
-          label="Endpoint"
-          value={d.worker_endpoint}
-          mono
-          envVar="PDF_WORKER_ENDPOINT"
-        />
-      </Group>
+      </SettingGroup>
     </>
   );
 }
 
-/* ---------- Nhóm 3: chỉ mục ---------- */
+/* ---------- Tab 2: gửi kèm mỗi lần upload ---------- */
 
-function IndexingTab({ data }: { data: import("@/lib/types").SettingsResponse }) {
+function PdfTab({
+  data,
+  settings,
+  onChange,
+}: {
+  data: SettingsResponse;
+  settings: StoredSettings;
+  onChange: (s: StoredSettings) => void;
+}) {
+  const p = settings.processing;
+  const img = data.document.preprocess.pdf_to_image;
+  const pre = data.document.preprocess;
+
+  const setImg = (patch: Record<string, unknown>) =>
+    onChange({
+      ...settings,
+      processing: {
+        ...p,
+        preprocess: {
+          ...p.preprocess,
+          pdf_to_image: { ...p.preprocess?.pdf_to_image, ...patch },
+        },
+      },
+    });
+
+  const setPre = (patch: Record<string, unknown>) =>
+    onChange({
+      ...settings,
+      processing: { ...p, preprocess: { ...p.preprocess, ...patch } },
+    });
+
+  const setLayout = (patch: Record<string, unknown>) =>
+    onChange({ ...settings, processing: { ...p, layout: { ...p.layout, ...patch } } });
+
+  const setOcr = (patch: Record<string, unknown>) =>
+    onChange({ ...settings, processing: { ...p, ocr: { ...p.ocr, ...patch } } });
+
+  return (
+    <>
+      <SettingGroup
+        title="PDF sang ảnh"
+        description="Áp dụng cho lần tải tài liệu tiếp theo. Tài liệu đã index không bị ảnh hưởng."
+      >
+        <NumberSetting
+          label="DPI mục tiêu"
+          hint="DPI thực tế tính động theo khổ trang: anchor / (rộng × cao) × dpi"
+          value={p.preprocess?.pdf_to_image?.dpi}
+          defaultValue={img.dpi}
+          min={LIMITS.dpi.min}
+          max={LIMITS.dpi.max}
+          onChange={(v) => setImg({ dpi: v })}
+        />
+        <NumberSetting
+          label="DPI tối thiểu"
+          hint="Sàn để trang khổ lớn không bị render quá nhỏ"
+          value={p.preprocess?.pdf_to_image?.min_dpi}
+          defaultValue={img.min_dpi}
+          min={LIMITS.min_dpi.min}
+          max={LIMITS.min_dpi.max}
+          onChange={(v) => setImg({ min_dpi: v })}
+        />
+        <NumberSetting
+          label="Số pixel chuẩn hoá"
+          hint="Mốc để mọi khổ sách ra ảnh có cùng lượng pixel, nhờ đó ngân sách visual token ổn định"
+          value={p.preprocess?.pdf_to_image?.anchor_size}
+          defaultValue={img.anchor_size}
+          min={LIMITS.anchor_size.min}
+          max={LIMITS.anchor_size.max}
+          step={10_000}
+          onChange={(v) => setImg({ anchor_size: v })}
+        />
+        <NumberSetting
+          label="Số luồng render"
+          value={p.preprocess?.pdf_to_image?.thread_count}
+          defaultValue={img.thread_count}
+          min={LIMITS.thread_count.min}
+          max={LIMITS.thread_count.max}
+          onChange={(v) => setImg({ thread_count: v })}
+        />
+      </SettingGroup>
+
+      <SettingGroup title="Cắt lề">
+        <BoolSetting
+          label="Bật cắt lề"
+          hint="Bỏ lề trắng là bỏ visual token vô nghĩa"
+          value={p.preprocess?.use_cut_padding}
+          defaultValue={pre.use_cut_padding}
+          onChange={(v) => setPre({ use_cut_padding: v })}
+        />
+        <NumberSetting
+          label="Lề chừa lại"
+          hint="Chừa quanh vùng chữ sau khi dò text"
+          value={p.preprocess?.padding}
+          defaultValue={pre.padding}
+          min={LIMITS.padding.min}
+          max={LIMITS.padding.max}
+          unit="px"
+          onChange={(v) => setPre({ padding: v })}
+        />
+        <NumberSetting
+          label="Batch dò chữ"
+          value={p.preprocess?.batch_size}
+          defaultValue={pre.batch_size}
+          min={LIMITS.preprocess_batch_size.min}
+          max={LIMITS.preprocess_batch_size.max}
+          onChange={(v) => setPre({ batch_size: v })}
+        />
+      </SettingGroup>
+
+      <SettingGroup title="Nhận diện bố cục và OCR">
+        <NumberSetting
+          label="Batch nhận diện bố cục"
+          hint="Lớn hơn thì nhanh hơn nhưng tốn VRAM hơn"
+          value={p.layout?.batch_size}
+          defaultValue={data.document.layout.batch_size}
+          min={LIMITS.layout_batch_size.min}
+          max={LIMITS.layout_batch_size.max}
+          onChange={(v) => setLayout({ batch_size: v })}
+        />
+        <NumberSetting
+          label="Batch OCR tiêu đề"
+          value={p.ocr?.title_batch_size}
+          defaultValue={data.document.ocr.title_batch_size}
+          min={LIMITS.ocr_batch_size.min}
+          max={LIMITS.ocr_batch_size.max}
+          onChange={(v) => setOcr({ title_batch_size: v })}
+        />
+        <NumberSetting
+          label="Batch OCR số trang"
+          value={p.ocr?.number_batch_size}
+          defaultValue={data.document.ocr.number_batch_size}
+          min={LIMITS.ocr_batch_size.min}
+          max={LIMITS.ocr_batch_size.max}
+          onChange={(v) => setOcr({ number_batch_size: v })}
+        />
+        <NumberSetting
+          label="Batch OCR công thức"
+          value={p.ocr?.formula_batch_size}
+          defaultValue={data.document.ocr.formula_batch_size}
+          min={LIMITS.ocr_batch_size.min}
+          max={LIMITS.ocr_batch_size.max}
+          onChange={(v) => setOcr({ formula_batch_size: v })}
+        />
+      </SettingGroup>
+    </>
+  );
+}
+
+/* ---------- Tab 3: cắt mục ---------- */
+
+function ChunkTab({
+  data,
+  settings,
+  onChange,
+}: {
+  data: SettingsResponse;
+  settings: StoredSettings;
+  onChange: (s: StoredSettings) => void;
+}) {
+  const p = settings.processing;
+  const chunk = data.document.chunking;
+  const toc = data.document.toc_validator;
+
+  const setChunk = (patch: Record<string, unknown>) =>
+    onChange({ ...settings, processing: { ...p, chunking: { ...p.chunking, ...patch } } });
+
+  const setToc = (patch: Record<string, unknown>) =>
+    onChange({
+      ...settings,
+      processing: { ...p, toc_validator: { ...p.toc_validator, ...patch } },
+    });
+
+  return (
+    <>
+      <SettingGroup
+        title="Cắt tài liệu thành mục"
+        description="Quyết định một mục gồm những gì. Đây là tham số ảnh hưởng chất lượng truy xuất nhiều nhất."
+      >
+        <NumberSetting
+          label="Lề cắt số trang"
+          hint="Cắt bỏ chân trang trước khi ghép ảnh-mục, để số trang không chen giữa mạch văn"
+          value={p.chunking?.cut_padding}
+          defaultValue={chunk.cut_padding}
+          min={LIMITS.chunk_cut_padding.min}
+          max={LIMITS.chunk_cut_padding.max}
+          unit="px"
+          onChange={(v) => setChunk({ cut_padding: v })}
+        />
+        <NumberSetting
+          label="Chiều cao mục tối thiểu"
+          hint="Mục thấp hơn ngưỡng coi như chỉ có tiêu đề, gộp vào mục trước. Tăng lên nếu thấy nhiều mục rỗng"
+          value={p.chunking?.min_section_height_px}
+          defaultValue={chunk.min_section_height_px}
+          min={LIMITS.min_section_height.min}
+          max={LIMITS.min_section_height.max}
+          unit="px"
+          onChange={(v) => setChunk({ min_section_height_px: v })}
+        />
+      </SettingGroup>
+
+      <SettingGroup
+        title="LLM sửa cây mục lục"
+        description="Layout model biết đây là tiêu đề nhưng không biết 5.4.2 là con của 5.4. LLM lọc tiêu đề giả và dựng quan hệ cha-con."
+      >
+        <TextSetting
+          label="Model"
+          hint="Chỉ là lệnh gọi API nên đổi được không cần khởi động lại"
+          value={p.toc_validator?.model_name}
+          defaultValue={toc.model_name}
+          mono
+          onChange={(v) => setToc({ model_name: v })}
+        />
+        <NumberSetting
+          label="Temperature"
+          hint="Thấp cho cây mục lục ổn định"
+          value={p.toc_validator?.temperature}
+          defaultValue={toc.temperature}
+          min={LIMITS.temperature.min}
+          max={LIMITS.temperature.max}
+          step={LIMITS.temperature.step}
+          onChange={(v) => setToc({ temperature: v })}
+        />
+      </SettingGroup>
+    </>
+  );
+}
+
+/* ---------- Tab 4: không đổi nóng được ---------- */
+
+function LockedTab({ data }: { data: SettingsResponse }) {
   const e = data.indexing.embedding;
   const v = data.indexing.vectordb;
 
   return (
     <>
-      <ReadOnlyNote warning="Đổi tham số embedding làm vector đã index không so được với vector mới. Phải index lại toàn bộ." />
+      <div className="flex items-start gap-2 rounded-md border border-destructive/25 bg-destructive/[0.04] px-3 py-2.5">
+        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
+        <p className="text-sm text-muted-foreground">
+          Những tham số này không đổi nóng được. Sửa trong <code>.env</code> rồi khởi
+          động lại service. Riêng nhóm embedding, đổi xong{" "}
+          <strong className="text-foreground">phải index lại toàn bộ tài liệu</strong>{" "}
+          vì vector cũ tính theo tham số cũ, không so được với vector mới.
+        </p>
+      </div>
 
-      <Group title="Embedding">
-        <ReadOnlyRow label="Loại" value={e.type} envVar="EMBEDDING_TYPE" />
-        <ReadOnlyRow label="Model" value={e.model_name} mono envVar="EMBEDDING_MODEL_NAME" />
-        <ReadOnlyRow label="Thiết bị" value={e.device} envVar="EMBEDDING_DEVICE" />
-        <ReadOnlyRow label="Số chiều vector" value={e.dim} envVar="EMBEDDING_DIM" />
-        <ReadOnlyRow
+      <SettingGroup title="Embedding">
+        <LockedSetting
+          label="Loại retriever"
+          value={e.type}
+          reason="Model đã nạp vào VRAM lúc khởi động"
+          envVar="EMBEDDING_TYPE"
+        />
+        <LockedSetting
+          label="Model"
+          value={e.model_name}
+          mono
+          reason="Model đã nạp vào VRAM lúc khởi động"
+          envVar="EMBEDDING_MODEL_NAME"
+        />
+        <LockedSetting
+          label="Thiết bị"
+          value={e.device}
+          reason="Model đã nạp trên thiết bị này"
+          envVar="EMBEDDING_DEVICE"
+        />
+        <LockedSetting
+          label="Số chiều vector"
+          value={e.dim}
+          reason="Collection trong vector DB đã tạo theo số chiều này"
+          envVar="EMBEDDING_DIM"
+        />
+        <LockedSetting
           label="Visual token tối đa"
           value={e.max_num_visual_tokens.toLocaleString("vi-VN")}
-          hint="Giảm xuống 4096 nếu thiếu VRAM, đánh đổi là chữ nhỏ khó đọc hơn"
+          reason="Vector đã index tính theo giá trị này. Đổi thì phải index lại toàn bộ"
           envVar="EMBEDDING_MAX_NUM_VISUAL_TOKENS"
         />
-        <ReadOnlyRow
+        <LockedSetting
           label="Chiều rộng tối thiểu"
           value={e.min_width ? `${e.min_width} px` : "không đặt"}
-          hint="Ghim chiều rộng trước rồi để chiều cao tự do, nhờ đó ảnh-mục cao vẫn đọc được chữ"
+          reason="Quyết định độ nét chữ khi resize ảnh-mục. Vector đã index theo giá trị này"
           envVar="EMBEDDING_MIN_WIDTH"
         />
-        <ReadOnlyRow
+        <LockedSetting
           label="Vector mỗi ảnh-mục"
           value={e.doc_dim.toLocaleString("vi-VN")}
-          hint={`${e.max_num_visual_tokens} visual token + ${e.prefix_num_tokens} prefix`}
-          envVar="—"
+          reason={`Tính ra: ${e.max_num_visual_tokens} visual token + ${e.prefix_num_tokens} prefix`}
         />
-        <ReadOnlyRow label="Chế độ batching" value={e.batching_mode} envVar="EMBEDDING_BATCHING_MODE" />
-        <ReadOnlyRow
+        <LockedSetting
+          label="Chế độ batching"
+          value={e.batching_mode}
+          reason="Đọc lúc khởi tạo embedding manager"
+          envVar="EMBEDDING_BATCHING_MODE"
+        />
+        <LockedSetting
           label="Ngân sách token mỗi batch"
           value={e.max_token.toLocaleString("vi-VN")}
-          hint="Sort ảnh theo số token rồi gộp batch theo ngân sách để giảm padding"
+          reason="Sort ảnh theo số token rồi gộp batch theo ngân sách để giảm padding"
           envVar="EMBEDDING_MAX_TOKEN"
         />
-        <ReadOnlyRow label="Batch size" value={e.batch_size} envVar="EMBEDDING_BATCH_SIZE" />
-      </Group>
+      </SettingGroup>
 
-      <Group title="Vector database">
-        <ReadOnlyRow label="Loại" value={v.type} envVar="VECTORDB_TYPE" />
-        <ReadOnlyRow label="URI" value={v.uri} mono envVar="VECTORDB_URI" />
-        <ReadOnlyRow label="Cổng gRPC" value={v.grpc_port} envVar="VECTORDB_GRPC_PORT" />
-        <ReadOnlyRow label="Database" value={v.database_name} mono envVar="VECTORDB_DATABASE_NAME" />
-        <ReadOnlyRow
+      <SettingGroup title="Vector database">
+        <LockedSetting
+          label="Loại"
+          value={v.type}
+          reason="Client đã kết nối theo loại này"
+          envVar="VECTORDB_TYPE"
+        />
+        <LockedSetting
+          label="URI"
+          value={v.uri}
+          mono
+          reason="Client đã kết nối tới địa chỉ này"
+          envVar="VECTORDB_URI"
+        />
+        <LockedSetting
           label="Collection"
           value={v.collection_name}
           mono
+          reason="Schema collection đã tạo theo cấu hình hiện tại"
           envVar="VECTORDB_COLLECTION_NAME"
         />
-        <ReadOnlyRow
+        <LockedSetting
           label="Giới hạn tìm kiếm"
           value={v.search_limit.toLocaleString("vi-VN")}
+          reason="Đọc lúc khởi tạo client"
           envVar="VECTORDB_SEARCH_LIMIT"
         />
-        <ReadOnlyRow
-          label="Batch ghi"
-          value={v.upsert_batch_size.toLocaleString("vi-VN")}
-          envVar="—"
+      </SettingGroup>
+
+      <SettingGroup title="Model nhận diện">
+        <LockedSetting
+          label="Model nhận diện bố cục"
+          value={data.document.layout.model_name}
+          mono
+          reason="Model đã nạp vào VRAM lúc worker khởi động"
         />
-      </Group>
+        <LockedSetting
+          label="Model dò chữ"
+          value={data.document.preprocess.text_model}
+          mono
+          reason="Model đã nạp vào VRAM lúc worker khởi động"
+        />
+      </SettingGroup>
 
-      <Group title="Lưu trữ">
-        <ReadOnlyRow label="Thư mục dữ liệu" value={data.data_dir} mono envVar="DATA_DIR" />
-        <ReadOnlyRow label="Thư mục metadata" value={data.metadata_dir} mono envVar="METADATA_DIR" />
-        <ReadOnlyRow label="Mức log" value={data.log_level} envVar="LOG_LEVEL" />
-      </Group>
-    </>
-  );
-}
-
-/* ---------- Nhóm 4: model ---------- */
-
-function ModelsTab({ data }: { data: import("@/lib/types").SettingsResponse }) {
-  return (
-    <>
-      <ReadOnlyNote />
-
-      <Group title="VLM đọc ảnh và trả lời">
-        <ReadOnlyRow label="Nhà cung cấp" value={data.models.vlm.type} envVar="VLM_TYPE" />
-        <ReadOnlyRow label="Model" value={data.models.vlm.model_name} mono envVar="VLM_MODEL_NAME" />
-        <ReadOnlyRow label="Endpoint" value={data.models.vlm.endpoint} mono envVar="VLM_ENDPOINT" />
-        <ReadOnlyRow
-          label="API key"
+      <SettingGroup title="VLM và LLM">
+        <LockedSetting
+          label="VLM model"
+          value={data.models.vlm.model_name}
+          mono
+          reason="Đổi được nhưng phải khớp với model vLLM đang serve"
+          envVar="VLM_MODEL_NAME"
+        />
+        <LockedSetting
+          label="VLM endpoint"
+          value={data.models.vlm.endpoint}
+          mono
+          reason="Client đã tạo theo endpoint này"
+          envVar="VLM_ENDPOINT"
+        />
+        <LockedSetting
+          label="VLM API key"
           value={data.models.vlm.api_key_configured ? "đã cấu hình" : "chưa có"}
+          reason="Secret không bao giờ trả ra khỏi server"
           envVar="OPENAI_API_KEY"
         />
-      </Group>
+      </SettingGroup>
 
-      <Group title="LLM cho tác vụ text">
-        <ReadOnlyRow label="Nhà cung cấp" value={data.models.llm.type} envVar="LLM_TYPE" />
-        <ReadOnlyRow label="Model" value={data.models.llm.model_name} mono envVar="LLM_MODEL_NAME" />
-        <ReadOnlyRow label="Endpoint" value={data.models.llm.endpoint} mono envVar="LLM_ENDPOINT" />
-      </Group>
+      <SettingGroup title="Lưu trữ">
+        <LockedSetting
+          label="Thư mục metadata"
+          value={data.metadata_dir}
+          mono
+          reason="Worker và backend phải trỏ chung một volume"
+          envVar="METADATA_DIR"
+        />
+        <LockedSetting
+          label="Mức log"
+          value={data.log_level}
+          reason="Đọc lúc khởi động service"
+          envVar="LOG_LEVEL"
+        />
+      </SettingGroup>
     </>
   );
 }
 
-/* ---------- Khối dựng ---------- */
+/* ---------- Phụ trợ ---------- */
 
-function Group({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="space-y-0">
-      <h3 className="border-b pb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </h3>
-      <div className="divide-y">{children}</div>
-    </section>
-  );
+function countOverrides<T extends object>(current: T, defaults: T): number {
+  let count = 0;
+  for (const key of Object.keys(current) as (keyof T)[]) {
+    const value = current[key];
+    if (value === undefined) continue;
+    if (defaults[key] === undefined || value !== defaults[key]) count += 1;
+  }
+  return count;
 }
 
-function Row({
-  label,
-  hint,
-  control,
-}: {
-  label: string;
-  hint?: string;
-  control: ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-3">
-      <div className="min-w-0 flex-1">
-        <Label className="text-[15px] font-normal">{label}</Label>
-        {hint && <p className="mt-0.5 text-sm text-muted-foreground">{hint}</p>}
-      </div>
-      <div className="shrink-0 pt-0.5">{control}</div>
-    </div>
-  );
-}
-
-function ReadOnlyRow({
-  label,
-  value,
-  hint,
-  mono,
-  envVar,
-}: {
-  label: string;
-  value: string | number | boolean;
-  hint?: string;
-  mono?: boolean;
-  envVar?: string;
-}) {
-  const display =
-    typeof value === "boolean" ? (value ? "bật" : "tắt") : String(value);
-
-  return (
-    <div className="flex items-start justify-between gap-4 py-2.5">
-      <div className="min-w-0 flex-1">
-        <p className="text-[15px]">{label}</p>
-        {hint && <p className="mt-0.5 text-sm text-muted-foreground">{hint}</p>}
-        {envVar && envVar !== "—" && (
-          <p className="mt-0.5 font-mono text-xs text-muted-foreground">{envVar}</p>
-        )}
-      </div>
-      <span
-        className={`shrink-0 rounded-sm bg-muted px-2 py-0.5 text-sm ${
-          mono ? "font-mono" : "tabular"
-        }`}
-        title={display}
-      >
-        {display}
-      </span>
-    </div>
-  );
-}
-
-function ReadOnlyNote({ warning }: { warning?: string }) {
-  return (
-    <div
-      className={`flex items-start gap-2 rounded-md border px-3 py-2.5 ${
-        warning
-          ? "border-destructive/25 bg-destructive/[0.04]"
-          : "border-border bg-muted/40"
-      }`}
-    >
-      {warning ? (
-        <Info className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
-      ) : (
-        <Lock className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
-      )}
-      <p className="text-sm text-muted-foreground">
-        {warning ??
-          "Nhóm này chỉ đọc. Đổi qua biến môi trường trong .env rồi khởi động lại service."}
-      </p>
-    </div>
-  );
+function countNested(obj: object): number {
+  let count = 0;
+  for (const value of Object.values(obj)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === "object" && !Array.isArray(value)) {
+      count += countNested(value as object);
+      continue;
+    }
+    count += 1;
+  }
+  return count;
 }
 
 function LoadingRows() {
   return (
     <div className="space-y-2" aria-busy="true">
-      <Skeleton className="h-10" />
-      <Skeleton className="h-10" />
-      <Skeleton className="h-10" />
+      <Skeleton className="h-12" />
+      <Skeleton className="h-12" />
+      <Skeleton className="h-12" />
+      <Skeleton className="h-12" />
     </div>
   );
 }
 
 function BackendOffline() {
   return (
-    <div className="rounded-md border border-dashed px-4 py-8 text-center" role="status">
-      <p className="text-[15px] font-medium">Chưa đọc được cấu hình</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Backend chưa chạy. Các tham số này lấy từ server.
+    <div className="rounded-md border border-dashed px-4 py-10 text-center" role="status">
+      <Lock className="mx-auto size-5 text-muted-foreground/70" aria-hidden />
+      <p className="mt-3 text-[15px] font-medium">Chưa đọc được cấu hình</p>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+        Giá trị mặc định lấy từ server nên cần backend chạy. Bạn vẫn đổi được tham số
+        nhưng sẽ không thấy giá trị gốc để so.
       </p>
     </div>
   );

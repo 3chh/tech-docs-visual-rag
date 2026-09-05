@@ -54,7 +54,13 @@ class RagService:
             )
         return self._client
 
-    def _ask_vlm(self, prompt: str, image_paths: list[str], system_prompt: str) -> str:
+    def _ask_vlm(
+        self,
+        prompt: str,
+        image_paths: list[str],
+        system_prompt: str,
+        temperature: float | None = None,
+    ) -> str:
         content: list[dict] = [{"type": "text", "text": prompt}]
 
         for image_path in image_paths:
@@ -77,13 +83,20 @@ class RagService:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": content})
 
+        kwargs: dict = {}
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+
         response = self.client.chat.completions.create(
             model=self.settings.vlm.model_name,
             messages=messages,
+            **kwargs,
         )
         return response.choices[0].message.content or ""
 
-    def rewrite_query(self, query: str) -> tuple[str, str | None]:
+    def rewrite_query(
+        self, query: str, preview_limit: int | None = None
+    ) -> tuple[str, str | None]:
         """Neo câu hỏi vào mục lục thật của corpus.
 
         Mục "noname" chứa bìa và mục lục; cho VLM nhìn vào đó rồi viết lại câu
@@ -93,7 +106,7 @@ class RagService:
         """
         try:
             toc_results = self.retrieval.search_by_section_title(
-                "noname", limit=TOC_PREVIEW_LIMIT
+                "noname", limit=preview_limit or TOC_PREVIEW_LIMIT
             )
         except Exception as e:
             logger.warning("Không lấy được mục lục để viết lại câu hỏi: %s", e)
@@ -129,12 +142,14 @@ class RagService:
         top_k: int = 5,
         system_prompt: str = "",
         use_toc_rewrite: bool = True,
+        toc_preview_limit: int | None = None,
+        vlm_temperature: float | None = None,
     ) -> dict:
         rewritten: str | None = None
         search_query = query
 
         if use_toc_rewrite:
-            search_query, rewritten = self.rewrite_query(query)
+            search_query, rewritten = self.rewrite_query(query, toc_preview_limit)
 
         search_results = self.retrieval.search([search_query], top_k)
         payloads = search_results[0][:top_k] if search_results else []
@@ -147,7 +162,9 @@ class RagService:
                 "payloads": [],
             }
 
-        answer = self._ask_vlm(query, image_paths, system_prompt or rag_prompt)
+        answer = self._ask_vlm(
+            query, image_paths, system_prompt or rag_prompt, vlm_temperature
+        )
         logger.info("Đã sinh câu trả lời (%d ký tự) từ %d mục", len(answer), len(image_paths))
 
         return {"answer": answer, "rewritten_query": rewritten, "payloads": payloads}

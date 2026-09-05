@@ -13,6 +13,7 @@ from ...schemas import (
     IndexResponse,
     UploadFilesResponse,
 )
+from ...schemas.overrides import ProcessingOverrides
 from ...services.indexing import IndexingService
 from ...services.retrieval import RetrievalService
 from ...services.toc import generate_and_save
@@ -102,11 +103,23 @@ async def upload_files(
                 tmp.write(await file.read())
                 tmp_path = tmp.name
 
+            # Override tham số xử lý cho riêng file này. Client gửi trong
+            # metadata; validate qua ProcessingOverrides để chặn giá trị vô lý.
+            overrides = ProcessingOverrides(
+                max_pages=file_meta.get("max_pages"),
+                vertical_split=file_meta.get("vertical_split", False),
+                preprocess=file_meta.get("preprocess"),
+                layout=file_meta.get("layout"),
+                ocr=file_meta.get("ocr"),
+                chunking=file_meta.get("chunking"),
+                toc_validator=file_meta.get("toc_validator"),
+            )
+
             image_paths = service.index(
                 pdf_path=tmp_path,
                 media_dir=f"{db_name}/{i}",
-                max_pages=file_meta.get("max_pages"),
-                custom_config={"vertical_split": file_meta.get("vertical_split", False)},
+                max_pages=overrides.max_pages,
+                custom_config=overrides.to_worker_config(),
                 metadata={
                     "file_name": display_name,
                     "original_name": file_meta.get("original_name", file.filename),

@@ -8,7 +8,9 @@ import { isMockMode, mockErrorTurn, mockTurns } from "@/lib/mock";
 import type { AskTurn, SearchResult } from "@/lib/types";
 
 import { AnswerBlock } from "./AnswerBlock";
-import { AskComposer, type AskOptions } from "./AskComposer";
+import type { AskOverrides } from "@/features/settings/types";
+
+import { AskComposer } from "./AskComposer";
 
 const SAMPLE_QUESTIONS = [
   "Mục nào quy định về tải trọng thiết kế?",
@@ -21,7 +23,7 @@ export function AskPanel({
   options,
 }: {
   collection: string;
-  options: AskOptions;
+  options: AskOverrides;
 }) {
   const [turns, setTurns] = useState<AskTurn[]>(() =>
     isMockMode() ? [...mockTurns, mockErrorTurn] : [],
@@ -63,6 +65,9 @@ export function AskPanel({
         collection,
         topK: options.topK,
         useTocRewrite: options.useTocRewrite,
+        tocPreviewLimit: options.tocPreviewLimit,
+        vlmTemperature: options.vlmTemperature,
+        systemPrompt: options.systemPrompt,
       });
 
       setTurns((prev) =>

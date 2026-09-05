@@ -14,6 +14,9 @@ class AskRequest(BaseModel):
     system_prompt: str = ""
     include_base64: bool = True
     use_toc_rewrite: bool = True
+    # Số ảnh mục lục cho VLM xem khi chuẩn hoá câu hỏi.
+    toc_preview_limit: Optional[int] = Field(default=None, ge=1, le=100)
+    vlm_temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
 
 
 class AskResponse(BaseModel):

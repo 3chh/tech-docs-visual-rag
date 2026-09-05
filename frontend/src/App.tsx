@@ -5,8 +5,12 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AskPanel } from "@/features/ask";
-import type { AskOptions } from "@/features/ask/AskComposer";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
+import {
+  loadSettings,
+  saveSettings,
+  type StoredSettings,
+} from "@/features/settings/types";
 import { DocumentsPanel } from "@/features/documents/DocumentsPanel";
 import { OutlinePanel } from "@/features/outline/OutlinePanel";
 import { cn } from "@/lib/utils";
@@ -26,10 +30,12 @@ type AreaId = (typeof AREAS)[number]["id"];
 export default function App() {
   const [collection, setCollection] = useState("default");
   const [area, setArea] = useState<AreaId>("ask");
-  const [askOptions, setAskOptions] = useState<AskOptions>({
-    topK: 5,
-    useTocRewrite: true,
-  });
+  const [settings, setSettings] = useState<StoredSettings>(loadSettings);
+
+  function updateSettings(next: StoredSettings) {
+    setSettings(next);
+    saveSettings(next);
+  }
 
   return (
     <SidebarProvider>
@@ -65,18 +71,18 @@ export default function App() {
             <span className="rounded-md border bg-card px-2 py-1 font-mono text-sm">
               {collection}
             </span>
-            <SettingsDialog options={askOptions} onOptionsChange={setAskOptions} />
+            <SettingsDialog settings={settings} onChange={updateSettings} />
           </div>
         </header>
 
         <main className="min-h-0 flex-1 overflow-hidden">
           {area === "ask" && (
-            <AskPanel collection={collection} options={askOptions} />
+            <AskPanel collection={collection} options={settings.ask} />
           )}
           {area === "outline" && <OutlinePanel collection={collection} />}
           {area === "documents" && (
             <div className="h-full overflow-y-auto">
-              <DocumentsPanel collection={collection} />
+              <DocumentsPanel collection={collection} overrides={settings.processing} />
             </div>
           )}
         </main>
