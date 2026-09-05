@@ -72,7 +72,12 @@ export function AskComposer({
           />
           <Button
             size="icon"
-            className="absolute bottom-2 right-2 size-8"
+            className={cn(
+              "absolute bottom-2 right-2 size-8",
+              // shadcn dùng disabled:opacity-50 khiến nút emerald hoá mờ,
+              // nhìn như lỗi render. Đổi hẳn màu cho rõ trạng thái.
+              "disabled:!opacity-100 disabled:bg-muted disabled:text-muted-foreground",
+            )}
             onClick={onSubmit}
             disabled={isBusy || !value.trim()}
             aria-label="Gửi câu hỏi"

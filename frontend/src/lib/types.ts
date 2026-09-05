@@ -96,3 +96,100 @@ export interface AskTurn {
   /** Câu hỏi sau khi neo vào mục lục, nếu có. */
   rewrittenQuery?: string;
 }
+
+/* ---- Cấu hình hệ thống (GET /settings) ---- */
+
+export interface RuntimeSettings {
+  top_k_default: number;
+  top_k_min: number;
+  top_k_max: number;
+  use_toc_rewrite_default: boolean;
+  toc_preview_limit: number;
+}
+
+export interface PdfToImageSettings {
+  dpi: number;
+  min_dpi: number;
+  anchor_size: number;
+  thread_count: number;
+  vertical_split: boolean;
+}
+
+export interface PreprocessSettings {
+  cut_params: number[];
+  padding: number;
+  batch_size: number;
+  text_model: string;
+  use_cut_padding: boolean;
+  pdf_to_image: PdfToImageSettings;
+}
+
+export interface ChunkingSettings {
+  cut_padding: number;
+  remove_page_number: boolean;
+  keep_chunk_pages: boolean;
+  min_section_height_px: number;
+}
+
+export interface DocumentSettings {
+  worker_endpoint: string;
+  preprocess: PreprocessSettings;
+  layout: { model_name: string; batch_size: number };
+  ocr: {
+    number_batch_size: number;
+    title_batch_size: number;
+    formula_batch_size: number;
+    lazy_load: boolean;
+  };
+  chunking: ChunkingSettings;
+  toc_validator: {
+    type: string;
+    model_name: string;
+    endpoint: string;
+    temperature: number;
+    api_key_configured: boolean;
+  };
+}
+
+export interface IndexingSettings {
+  embedding: {
+    type: string;
+    model_name: string;
+    device: string;
+    dim: number;
+    max_num_visual_tokens: number;
+    min_width: number | null;
+    batching_mode: string;
+    batch_size: number;
+    max_token: number;
+    prefix_num_tokens: number;
+    doc_dim: number;
+  };
+  vectordb: {
+    type: string;
+    uri: string;
+    grpc_port: number;
+    database_name: string;
+    collection_name: string;
+    search_limit: number;
+    upsert_batch_size: number;
+  };
+}
+
+export interface ModelEndpoint {
+  type: string;
+  endpoint: string;
+  model_name: string;
+  api_key_configured: boolean;
+}
+
+export interface SettingsResponse {
+  runtime: RuntimeSettings;
+  document: DocumentSettings;
+  indexing: IndexingSettings;
+  models: { vlm: ModelEndpoint; llm: ModelEndpoint };
+  data_dir: string;
+  metadata_dir: string;
+  log_level: string;
+  editable_note: string;
+}

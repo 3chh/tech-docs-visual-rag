@@ -4,6 +4,7 @@ import type {
   AskResponse,
   HealthResponse,
   SearchResponse,
+  SettingsResponse,
   TableOfContents,
   UploadFileMeta,
   UploadResponse,
@@ -75,6 +76,10 @@ function postJson<T>(path: string, body: unknown, timeoutMs?: number): Promise<T
 export const api = {
   health(): Promise<HealthResponse> {
     return request<HealthResponse>("/health");
+  },
+
+  settings(): Promise<SettingsResponse> {
+    return request<SettingsResponse>("/settings");
   },
 
   listCollections(userId: string): Promise<string[]> {

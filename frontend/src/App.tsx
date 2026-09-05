@@ -5,6 +5,8 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AskPanel } from "@/features/ask";
+import type { AskOptions } from "@/features/ask/AskComposer";
+import { SettingsDialog } from "@/features/settings/SettingsDialog";
 import { DocumentsPanel } from "@/features/documents/DocumentsPanel";
 import { OutlinePanel } from "@/features/outline/OutlinePanel";
 import { cn } from "@/lib/utils";
@@ -24,6 +26,10 @@ type AreaId = (typeof AREAS)[number]["id"];
 export default function App() {
   const [collection, setCollection] = useState("default");
   const [area, setArea] = useState<AreaId>("ask");
+  const [askOptions, setAskOptions] = useState<AskOptions>({
+    topK: 5,
+    useTocRewrite: true,
+  });
 
   return (
     <SidebarProvider>
@@ -55,13 +61,18 @@ export default function App() {
             ))}
           </nav>
 
-          <span className="ml-auto rounded-md border bg-card px-2 py-1 font-mono text-sm">
-            {collection}
-          </span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="rounded-md border bg-card px-2 py-1 font-mono text-sm">
+              {collection}
+            </span>
+            <SettingsDialog options={askOptions} onOptionsChange={setAskOptions} />
+          </div>
         </header>
 
         <main className="min-h-0 flex-1 overflow-hidden">
-          {area === "ask" && <AskPanel collection={collection} />}
+          {area === "ask" && (
+            <AskPanel collection={collection} options={askOptions} />
+          )}
           {area === "outline" && <OutlinePanel collection={collection} />}
           {area === "documents" && (
             <div className="h-full overflow-y-auto">

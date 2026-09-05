@@ -2,13 +2,13 @@ import { Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/common";
-import { api } from "@/lib/api";
-import type { AskTurn, SearchResult } from "@/lib/types";
 import { SourceView } from "@/features/source";
+import { api } from "@/lib/api";
+import { isMockMode, mockErrorTurn, mockTurns } from "@/lib/mock";
+import type { AskTurn, SearchResult } from "@/lib/types";
 
 import { AnswerBlock } from "./AnswerBlock";
 import { AskComposer, type AskOptions } from "./AskComposer";
-import { AskToolbar } from "./AskToolbar";
 
 const SAMPLE_QUESTIONS = [
   "Mục nào quy định về tải trọng thiết kế?",
@@ -16,16 +16,26 @@ const SAMPLE_QUESTIONS = [
   "Công thức tính ứng suất uốn ở mục nào?",
 ];
 
-export function AskPanel({ collection }: { collection: string }) {
-  const [turns, setTurns] = useState<AskTurn[]>([]);
+export function AskPanel({
+  collection,
+  options,
+}: {
+  collection: string;
+  options: AskOptions;
+}) {
+  const [turns, setTurns] = useState<AskTurn[]>(() =>
+    isMockMode() ? [...mockTurns, mockErrorTurn] : [],
+  );
   const [draft, setDraft] = useState("");
-  const [options, setOptions] = useState<AskOptions>({ topK: 5, useTocRewrite: true });
-  const [activeSource, setActiveSource] = useState<SearchResult | null>(null);
+  const [activeSource, setActiveSource] = useState<SearchResult | null>(() =>
+    isMockMode() ? (mockTurns[0]?.sources[0] ?? null) : null,
+  );
   const [isBusy, setIsBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Đổi bộ tài liệu thì hội thoại cũ không còn ngữ cảnh.
   useEffect(() => {
+    if (isMockMode()) return;
     setTurns([]);
     setActiveSource(null);
   }, [collection]);
@@ -90,23 +100,21 @@ export function AskPanel({ collection }: { collection: string }) {
   return (
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
-        <AskToolbar options={options} onChange={setOptions} disabled={isBusy} />
-
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[46rem] space-y-7 px-6 py-6">
+          <div className="mx-auto w-full max-w-[48rem] space-y-8 px-6 py-6">
             {turns.length === 0 ? (
               <EmptyState
                 icon={Search}
                 title={`Tra cứu trong ${collection}`}
                 description="Hệ thống đọc trực tiếp ảnh trang tài liệu nên hiểu được cả bảng, công thức và hình vẽ. Câu trả lời luôn kèm số trang in để bạn đối chiếu với bản cứng."
                 action={
-                  <ul className="w-full max-w-md space-y-1">
+                  <ul className="w-full max-w-md space-y-1.5">
                     {SAMPLE_QUESTIONS.map((question) => (
                       <li key={question}>
                         <button
                           type="button"
                           onClick={() => setDraft(question)}
-                          className="w-full rounded-md border bg-card px-3 py-2 text-left text-[15px] transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25"
+                          className="w-full rounded-md border bg-card px-3 py-2.5 text-left text-[15px] transition-colors hover:border-primary/40 hover:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25"
                         >
                           {question}
                         </button>
