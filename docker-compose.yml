@@ -1,0 +1,116 @@
+# Cosmo ChatPDF — stack đầy đủ.
+#
+#   docker compose up -d                                    # CPU (backend/worker sẽ chậm)
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d   # có GPU
+#
+# Backend và worker dùng chung volume `app-data` để API đọc được ảnh-mục mà
+# worker sinh ra.
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.5
+    container_name: cosmo-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      # Ảnh qdrant không có curl/wget nên dùng chính binary của nó.
+      test: ["CMD", "/qdrant/qdrant", "--version"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    container_name: cosmo-worker
+    restart: unless-stopped
+    ports:
+      - "${WORKER_PORT:-8001}:8001"
+    volumes:
+      - app-data:/data
+    environment:
+      DATA_DIR: /data
+      METADATA_DIR: /data/metadata
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TOC_VALIDATOR_TYPE: ${TOC_VALIDATOR_TYPE:-gemini}
+      TOC_VALIDATOR_MODEL_NAME: ${TOC_VALIDATOR_MODEL_NAME:-gemini-2.0-flash}
+      TOC_VALIDATOR_ENDPOINT: ${TOC_VALIDATOR_ENDPOINT:-https://generativelanguage.googleapis.com/v1beta/openai/}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY chưa được đặt trong .env}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
+      VLM_TYPE: ${VLM_TYPE:-openai}
+      VLM_ENDPOINT: ${VLM_ENDPOINT:-http://localhost:8000/v1}
+      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-78B-AWQ}
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cosmo-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - app-data:/data
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    environment:
+      DATA_DIR: /data
+      METADATA_DIR: /data/metadata
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      VECTORDB_TYPE: ${VECTORDB_TYPE:-qdrant-standalone}
+      VECTORDB_URI: http://qdrant:6333
+      VECTORDB_GRPC_PORT: 6334
+      VECTORDB_DATABASE_NAME: ${VECTORDB_DATABASE_NAME:-cosmo}
+      VECTORDB_COLLECTION_NAME: ${VECTORDB_COLLECTION_NAME:-context}
+
+      EMBEDDING_TYPE: ${EMBEDDING_TYPE:-longcolqwen}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-tsystems/colqwen2.5-3b-multilingual-v1.0}
+      EMBEDDING_DEVICE: ${EMBEDDING_DEVICE:-cuda}
+      EMBEDDING_MAX_NUM_VISUAL_TOKENS: ${EMBEDDING_MAX_NUM_VISUAL_TOKENS:-8192}
+      EMBEDDING_MIN_WIDTH: ${EMBEDDING_MIN_WIDTH:-600}
+      EMBEDDING_MAX_TOKEN: ${EMBEDDING_MAX_TOKEN:-13000}
+
+      PDF_WORKER_ENDPOINT: http://worker:8001/upload_pdf/
+
+      VLM_TYPE: ${VLM_TYPE:-openai}
+      VLM_ENDPOINT: ${VLM_ENDPOINT:-http://localhost:8000/v1}
+      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-78B-AWQ}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cosmo-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-7860}:7860"
+    volumes:
+      # Chỉ đọc: frontend cần đường dẫn ảnh-mục để hiển thị.
+      - app-data:/data:ro
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:8000
+      FRONTEND_SEARCH_TIMEOUT: ${FRONTEND_SEARCH_TIMEOUT:-1000}
+      VLM_ENDPOINT: ${VLM_ENDPOINT:-http://localhost:8000/v1}
+      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-78B-AWQ}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+volumes:
+  qdrant-data:
+  app-data:

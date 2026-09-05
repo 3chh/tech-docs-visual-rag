@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Secrets — không bao giờ commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Dữ liệu runtime
+data/
+!data/.gitkeep
+metadata/
+volumes/
+*.db
+*.sqlite3
+
+# Tài liệu nguồn (user tự đặt vào volume)
+*.pdf
+*.png
+*.jpg
+*.jpeg
+!docs/**/*.png
+
+# Model cache
+.cache/
+models_cache/
+*.safetensors
+*.bin
+
+# Notebook
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Log
+logs/
+*.log

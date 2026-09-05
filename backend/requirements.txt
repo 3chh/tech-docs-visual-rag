@@ -1,0 +1,9 @@
+# API service: embed ảnh-mục + truy xuất vector
+# Cài trước: pip install torch --index-url https://download.pytorch.org/whl/cu121
+-r requirements-base.txt
+
+colpali-engine==0.3.12
+transformers==4.53.3
+qdrant-client==1.15.1
+pymilvus==2.5.4
+numpy<2.0

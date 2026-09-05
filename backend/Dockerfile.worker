@@ -1,0 +1,43 @@
+# PDF worker: PaddleOCR + layout detection + ghép ảnh-mục.
+# Tách khỏi API service vì nạp bộ model khác và cần poppler.
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive
+
+# poppler-utils cho pdf2image; libgl/libglib cho opencv.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3.11 python3.11-dev python3-pip \
+        poppler-utils \
+        libgl1 libglib2.0-0 \
+        curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python \
+    && ln -sf /usr/bin/python3.11 /usr/bin/python3
+
+WORKDIR /srv
+
+RUN groupadd --gid 1000 app && \
+    useradd --uid 1000 --gid app --create-home app
+
+COPY requirements-base.txt requirements-worker.txt ./
+RUN pip install --no-cache-dir -r requirements-worker.txt
+
+COPY --chown=app:app . ./backend/
+RUN touch /srv/__init__.py && chown app:app /srv/__init__.py && \
+    mkdir -p /data && chown -R app:app /data
+
+USER app
+
+ENV DATA_DIR=/data \
+    METADATA_DIR=/data/metadata \
+    CONFIG_PATH=/srv/backend/config/config.yaml
+
+EXPOSE 8001
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD curl -fsS http://localhost:8001/health || exit 1
+
+CMD ["uvicorn", "backend.worker.main:app", "--host", "0.0.0.0", "--port", "8001"]

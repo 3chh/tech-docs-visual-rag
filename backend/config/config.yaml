@@ -1,0 +1,80 @@
+# ============================================================
+# Cosmo ChatPDF — cấu hình mặc định
+#
+# Mọi giá trị ở đây đều override được bằng biến môi trường (xem .env.example).
+# KHÔNG đặt secret (API key, token) vào file này — chúng chỉ đọc từ env.
+# ============================================================
+
+embedding_manager:
+  type: longcolqwen            # longcolqwen | colqwen | colpali | colidefics
+  model_name: tsystems/colqwen2.5-3b-multilingual-v1.0
+  device: cuda
+  dim: 128
+  max_num_visual_tokens: 8192
+  min_width: 600               # chỉ dùng cho longcolqwen
+  batching_mode: dynamic       # dynamic | normal
+  batch_size: 1
+  max_token: 13000             # ngân sách token cho dynamic batching
+  PREFIX_NUM_TOKENS: 11
+
+database:
+  type: qdrant-standalone      # qdrant-standalone | milvus-lite | milvus-standalone
+  uri: http://localhost:6333
+  grpc_port: 6334
+  database_name: cosmo
+  collection_name: context
+  search_limit: 16384
+
+# VLM đọc ảnh-mục để sinh câu trả lời
+vlm:
+  type: openai
+  endpoint: http://localhost:8000/v1
+  model_name: OpenGVLab/InternVL3-78B-AWQ
+
+# LLM dùng cho các tác vụ text thuần
+llm:
+  type: openai
+  endpoint: http://localhost:8000/v1
+  model_name: OpenGVLab/InternVL3-78B-AWQ
+
+pdf_manager:
+  serving:
+    endpoint: http://localhost:8001/upload_pdf/
+
+  summary_reporter:
+    number_batch_size: 16
+    title_batch_size: 16
+    formula_batch_size: 16
+    lazy_load: false
+
+  section_merger:
+    cut_padding: 60
+    remove_page_number: true
+    keep_chunk_pages: true
+
+  preprocess_pdf:
+    cut_params: [0, 0, 0, 0]   # [top, bottom, left, right]
+    padding: 30
+    batch_size: 16
+    text_model: PP-OCRv5_server_det
+    use_cut_padding: true
+    pdf_to_image:
+      dpi: 300
+      thread_count: 512
+      vertical_split: true
+      anchor_size: 500990      # chuẩn hoá số pixel giữa các khổ sách khác nhau
+      min_dpi: 45
+
+  # LLM sửa cây mục lục sau khi layout detection sinh danh sách tiêu đề
+  llm_validator:
+    type: gemini               # gemini | openai
+    model_name: gemini-2.0-flash
+    endpoint: https://generativelanguage.googleapis.com/v1beta/openai/
+    temperature: 0.6
+
+  element_detector:
+    batch_size: 32
+    model_name: PP-DocLayout_plus-L
+
+  # PDF nạp sẵn lúc khởi động (tuỳ chọn, để trống nếu không dùng)
+  default_pdfs: []
