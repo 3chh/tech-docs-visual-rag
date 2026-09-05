@@ -3,7 +3,6 @@ import {
   Check,
   FileStack,
   Layers,
-  ListTree,
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
@@ -43,7 +42,7 @@ export interface SessionSummary {
   updatedAt: number;
 }
 
-export type AreaId = "ask" | "documents" | "outline";
+export type AreaId = "ask" | "documents";
 
 interface AppSidebarProps {
   currentArea: AreaId;
@@ -88,11 +87,10 @@ export function AppSidebar({
     setIsAddingCollection(false);
   }
 
-  // Danh sách các Tab khu vực làm việc
+  // Danh sách các Tab khu vực làm việc (Đã hợp nhất Mục lục vào trong Tài liệu)
   const NAV_TABS: { id: AreaId; label: string; icon: typeof MessageSquare }[] = [
     { id: "ask", label: t("nav_chat"), icon: MessageSquare },
     { id: "documents", label: t("nav_documents"), icon: FileStack },
-    { id: "outline", label: t("nav_outline"), icon: ListTree },
   ];
 
   return (

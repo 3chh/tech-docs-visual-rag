@@ -375,8 +375,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 "- $A_g$: Diện tích mặt cắt ngang nguyên của thanh thép.\n"
                 "- $\\sigma_{cud}$: Ứng suất nén giới hạn danh định, phụ thuộc vào độ mảnh $\\lambda = l_e / r$.\n\n"
                 "2. **Hệ số uốn dọc và ổn định cục bộ:**\n"
-                "Được tra theo **Bảng 5.4.1** (trang `-94-`) căn cứ vào cấp độ dẻo và bề dày bản cánh/bản bụng.\n\n"
-                "> 💡 *Bạn có thể nhấp vào huy hiệu trích dẫn `[5.4.4]` hoặc số trang `[-93-]` bên dưới để mở trực tiếp ảnh bản vẽ cắt lát đối soát trên Canvas bên phải.*"
+                "Được tra theo **Bảng 5.4.1** (trang `-94-`) căn cứ vào cấp độ dẻo và bề dày bản cánh/bản bụng."
             )
 
             response = {

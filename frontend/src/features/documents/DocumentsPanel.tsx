@@ -3,23 +3,37 @@ import {
   BookMarked,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  FilePlus2,
+  FileSliders,
   FileStack,
   Layers,
+  ListTree,
   Loader2,
+  Search,
+  Sigma,
   Upload,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { EmptyState, SectionHeading, StatTile } from "@/components/common";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTableOfContents, useUploadFiles } from "@/hooks/use-api";
-import type { ProcessingOverrides } from "@/features/settings/types";
-import { pruneEmpty } from "@/features/settings/types";
-import type { TocBook, UploadFileMeta, UploadResponse } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import {
+  configToProcessingOverrides,
+  loadCollectionConfig,
+  pruneEmpty,
+  type CollectionConfig,
+} from "@/features/settings/types";
 import { useI18n } from "@/lib/i18n";
+import type { TocBook, TocSection, UploadFileMeta, UploadResponse } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
+import { CollectionSettingsDialog } from "./CollectionSettingsDialog";
+import { CreateCollectionDialog } from "./CreateCollectionDialog";
 import {
   createQueuedFiles,
   FileConfigRow,
@@ -27,28 +41,36 @@ import {
   type QueuedFile,
 } from "./UploadQueue";
 
-/**
- * Khu vực Tài liệu: gộp "xem đang có gì" và "thêm mới" vào một chỗ.
- *
- * Tách hai việc này thành hai tab là chia theo endpoint, không theo công việc:
- * người dùng tải lên xong muốn thấy kết quả ngay tại đây.
- */
 export function DocumentsPanel({
   collection,
-  overrides,
+  onCollectionChange,
   onOpenBookInCanvas,
+  onOpenSectionInCanvas,
 }: {
   collection: string;
-  overrides: ProcessingOverrides;
+  onCollectionChange?: (col: string) => void;
   onOpenBookInCanvas?: (book: TocBook) => void;
+  onOpenSectionInCanvas?: (section: TocSection, book: TocBook) => void;
 }) {
   const toc = useTableOfContents(collection);
   const upload = useUploadFiles();
+  const { t } = useI18n();
+
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [rejected, setRejected] = useState<string[]>([]);
   const [result, setResult] = useState<UploadResponse | null>(null);
 
-  const { t } = useI18n();
+  // Quản lý xem mục lục của từng tài liệu
+  const [expandedBooks, setExpandedBooks] = useState<Set<number>>(new Set([0]));
+  const [bookFilters, setBookFilters] = useState<Record<number, string>>({});
+
+  // Cấu hình bộ tài liệu
+  const [collectionConfig, setCollectionConfig] = useState<CollectionConfig>(() =>
+    loadCollectionConfig(collection),
+  );
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
   const books = toc.data?.books ?? [];
   const totals = useMemo(
     () => ({
@@ -61,6 +83,15 @@ export function DocumentsPanel({
 
   const isBusy = upload.isPending;
 
+  function toggleBookOutline(bookIndex: number) {
+    setExpandedBooks((prev) => {
+      const next = new Set(prev);
+      if (next.has(bookIndex)) next.delete(bookIndex);
+      else next.add(bookIndex);
+      return next;
+    });
+  }
+
   function addFiles(files: FileList) {
     const { accepted, rejected: bad } = createQueuedFiles(files);
     if (accepted.length) setQueue((prev) => [...prev, ...accepted]);
@@ -71,14 +102,12 @@ export function DocumentsPanel({
   function submit() {
     if (!queue.length) return;
 
-    // Gửi kèm override từ Cấu hình. pruneEmpty bỏ khoá rỗng để backend
-    // chỉ nhận cái người dùng đổi thật, phần còn lại dùng mặc định server.
-    const processing = pruneEmpty(overrides) ?? {};
+    const processing = pruneEmpty(configToProcessingOverrides(collectionConfig)) ?? {};
 
     const metadata: UploadFileMeta[] = queue.map((item) => ({
       display_name: item.displayName || item.file.name,
       original_name: item.file.name,
-      vertical_split: item.verticalSplit,
+      vertical_split: item.verticalSplit ?? collectionConfig.preprocess.vertical_split,
       max_pages: item.maxPages,
       ...processing,
     }));
@@ -96,20 +125,62 @@ export function DocumentsPanel({
 
   return (
     <div className="mx-auto w-full max-w-[55rem] space-y-6 px-6 py-6">
-      <header className="flex items-baseline justify-between border-b pb-3">
+      {/* Header với nút Cấu hình bộ tài liệu và Tạo bộ tài liệu mới */}
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <div>
-          <h1 className="text-base font-semibold tracking-tight text-foreground">
-            {t("documents_title")}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-base font-semibold tracking-tight text-foreground">
+              {t("documents_title")}
+            </h1>
+            <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
+              {collection}
+            </span>
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {t("in_collection")}: <span className="font-mono text-foreground font-medium">{collection}</span>
+            {totals.books} cuốn · {totals.pages} trang · {totals.sections} điều khoản
           </p>
         </div>
-        <span className="text-xs font-mono text-muted-foreground">
-          {totals.books} cuốn · {totals.pages} trang
-        </span>
+
+        <div className="flex items-center gap-2">
+          {/* Nút Cấu hình bộ tài liệu hiện tại */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsConfigOpen(true)}
+            className="h-8 gap-1.5 text-xs text-foreground hover:bg-muted font-medium"
+          >
+            <FileSliders className="size-3.5 text-emerald-600" />
+            <span>Cấu hình bộ tài liệu</span>
+          </Button>
+
+          {/* Nút Tạo bộ tài liệu mới */}
+          <Button
+            size="sm"
+            onClick={() => setIsCreateOpen(true)}
+            className="h-8 gap-1.5 text-xs bg-emerald-600 text-white hover:bg-emerald-700 font-medium"
+          >
+            <FilePlus2 className="size-3.5" />
+            <span>Tạo bộ mới</span>
+          </Button>
+        </div>
       </header>
 
+      {/* Dialog Cấu hình bộ tài liệu */}
+      <CollectionSettingsDialog
+        collection={collection}
+        open={isConfigOpen}
+        onOpenChange={setIsConfigOpen}
+        onSaved={(newCfg) => setCollectionConfig(newCfg)}
+      />
+
+      {/* Dialog Tạo bộ tài liệu mới */}
+      <CreateCollectionDialog
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        onCreated={(newColId) => onCollectionChange?.(newColId)}
+      />
+
+      {/* Thống kê tài liệu */}
       {toc.isLoading ? (
         <div className="grid grid-cols-3 gap-2.5">
           {[0, 1, 2].map((i) => (
@@ -119,13 +190,14 @@ export function DocumentsPanel({
       ) : (
         books.length > 0 && (
           <dl className="grid grid-cols-3 gap-2.5">
-            <StatTile icon={BookMarked} label="Cuốn" value={totals.books} />
-            <StatTile icon={Layers} label="Mục" value={totals.sections} />
-            <StatTile icon={FileStack} label="Trang" value={totals.pages} />
+            <StatTile icon={BookMarked} label="Cuốn tài liệu" value={totals.books} />
+            <StatTile icon={Layers} label="Mục điều khoản" value={totals.sections} />
+            <StatTile icon={FileStack} label="Tổng số trang" value={totals.pages} />
           </dl>
         )
       )}
 
+      {/* Dropzone tải lên */}
       <UploadDropzone disabled={isBusy} onFiles={addFiles} />
 
       {rejected.length > 0 && (
@@ -138,6 +210,7 @@ export function DocumentsPanel({
         </ul>
       )}
 
+      {/* Hàng đợi file tải lên */}
       {queue.length > 0 && (
         <section className="space-y-2.5">
           <SectionHeading
@@ -172,12 +245,6 @@ export function DocumentsPanel({
             ))}
           </div>
 
-          {Object.keys(pruneEmpty(overrides) ?? {}).length > 0 && (
-            <p className="text-sm text-muted-foreground">
-              Đang áp cấu hình xử lý tuỳ chỉnh từ mục Cấu hình.
-            </p>
-          )}
-
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={submit} disabled={isBusy}>
               {isBusy ? (
@@ -194,7 +261,7 @@ export function DocumentsPanel({
             </Button>
             {isBusy && (
               <p className="text-sm text-muted-foreground" role="status">
-                Sách vài trăm trang có thể mất 20 phút. Đừng đóng tab.
+                Sách vài trăm trang có thể mất 15-20 phút. Đừng đóng tab.
               </p>
             )}
           </div>
@@ -209,53 +276,185 @@ export function DocumentsPanel({
 
       {result && <ResultSummary result={result} />}
 
-      <section className="space-y-2.5">
+      {/* Danh sách Tài liệu kèm Mục lục Tích hợp cho từng cuốn */}
+      <section className="space-y-3">
         <SectionHeading>{t("in_collection")}</SectionHeading>
 
         {toc.isLoading ? (
           <div className="space-y-2">
-            <Skeleton className="h-14" />
-            <Skeleton className="h-14" />
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
           </div>
         ) : books.length === 0 ? (
           <EmptyState
             variant="bordered"
             icon={FileStack}
             title="Chưa có tài liệu nào"
-            description="Kéo PDF vào vùng phía trên để bắt đầu. Sau khi xử lý xong, các cuốn sẽ xuất hiện ở đây kèm mục lục đã nhận diện."
+            description="Kéo thả tệp PDF vào vùng phía trên để bắt đầu phân tích và dựng cây mục lục."
           />
         ) : (
-          <ul className="divide-y rounded-md border bg-card">
-            {books.map((book) => (
-              <li key={book.book_index} className="flex items-center justify-between gap-3 p-3">
-                <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                  <span className="mt-px flex size-5 shrink-0 items-center justify-center rounded-sm bg-muted font-mono text-xs tabular font-medium">
-                    {book.book_index}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[15px] font-medium leading-snug truncate">
-                      {book.title ?? `Cuốn ${book.book_index}`}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground tabular">
-                      {book.total_sections} {t("total_sections")} · {book.total_pages} {t("total_pages")}
-                    </p>
-                  </div>
-                </div>
+          <div className="space-y-3">
+            {books.map((book) => {
+              const isExpanded = expandedBooks.has(book.book_index);
+              const filterText = bookFilters[book.book_index] || "";
+              const sections = (book.sections ?? []).filter((s) =>
+                filterText ? s.title?.toLowerCase().includes(filterText.toLowerCase()) : true,
+              );
 
-                {onOpenBookInCanvas && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 gap-1.5 text-xs font-medium shrink-0"
-                    onClick={() => onOpenBookInCanvas(book)}
-                  >
-                    <BookOpen className="size-3.5 text-emerald-600" />
-                    <span>{t("open_in_canvas")}</span>
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
+              return (
+                <div
+                  key={book.book_index}
+                  className="rounded-lg border bg-card overflow-hidden shadow-2xs transition-all"
+                >
+                  {/* Tiêu đề cuốn sách */}
+                  <div className="flex items-center justify-between gap-3 p-3.5 bg-muted/10 hover:bg-muted/20 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => toggleBookOutline(book.book_index)}
+                      className="flex items-start gap-2.5 min-w-0 flex-1 text-left"
+                    >
+                      <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-sm bg-muted font-mono text-xs tabular font-semibold text-foreground">
+                        {book.book_index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {book.title ?? `Tài liệu ${book.book_index + 1}`}
+                          </p>
+                          {isExpanded ? (
+                            <ChevronDown className="size-4 text-muted-foreground shrink-0" />
+                          ) : (
+                            <ChevronRight className="size-4 text-muted-foreground shrink-0" />
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground tabular">
+                          {book.total_sections} {t("total_sections")} · {book.total_pages} {t("total_pages")}
+                        </p>
+                      </div>
+                    </button>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Nút Xem mục lục */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-8 gap-1.5 text-xs font-medium",
+                          isExpanded && "bg-muted text-emerald-700 dark:text-emerald-300",
+                        )}
+                        onClick={() => toggleBookOutline(book.book_index)}
+                      >
+                        <ListTree className="size-3.5 text-emerald-600" />
+                        <span>Mục lục ({book.sections?.length ?? 0})</span>
+                      </Button>
+
+                      {/* Nút Đọc trên Canvas */}
+                      {onOpenBookInCanvas && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5 text-xs font-medium"
+                          onClick={() => onOpenBookInCanvas(book)}
+                        >
+                          <BookOpen className="size-3.5 text-emerald-600" />
+                          <span>{t("open_in_canvas")}</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Cây Mục lục được tích hợp trực tiếp cho cuốn sách này */}
+                  {isExpanded && (
+                    <div className="border-t bg-card p-4 space-y-3">
+                      {/* Ô tìm kiếm mục lục trong cuốn */}
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1 max-w-sm">
+                          <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+                          <Input
+                            placeholder="Lọc điều khoản, công thức trong cuốn này..."
+                            value={filterText}
+                            onChange={(e) =>
+                              setBookFilters((prev) => ({
+                                ...prev,
+                                [book.book_index]: e.target.value,
+                              }))
+                            }
+                            className="h-8 pl-8 text-xs"
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {sections.length} mục hiển thị
+                        </span>
+                      </div>
+
+                      {/* Danh sách các điều khoản mục lục */}
+                      {sections.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic py-3 text-center">
+                          {filterText ? "Không tìm thấy điều khoản phù hợp." : "Chưa có mục lục."}
+                        </p>
+                      ) : (
+                        <div className="divide-y rounded-md border bg-muted/5 max-h-72 overflow-y-auto">
+                          {sections.map((sec, sIdx) => {
+                            const isTitle = sec.title && sec.title !== "noname";
+                            return (
+                              <div
+                                key={sIdx}
+                                className="flex items-center justify-between gap-3 px-3 py-2 text-xs hover:bg-muted/30 transition-colors"
+                              >
+                                <div className="min-w-0 flex-1 flex items-center gap-2">
+                                  <span className="font-mono text-[10px] text-muted-foreground w-6 text-right shrink-0">
+                                    {sIdx + 1}.
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "truncate",
+                                      isTitle ? "font-medium text-foreground" : "text-muted-foreground italic",
+                                    )}
+                                  >
+                                    {sec.title || "Mục chưa đặt tên"}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0 font-mono text-[11px]">
+                                  {sec.formulas !== undefined && sec.formulas > 0 && (
+                                    <span className="flex items-center gap-0.5 text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                                      <Sigma className="size-3" />
+                                      <span>{sec.formulas}</span>
+                                    </span>
+                                  )}
+
+                                  {sec.page_range && (
+                                    <span className="text-muted-foreground text-[10px]">
+                                      Trang {sec.page_range}
+                                    </span>
+                                  )}
+
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[11px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                    onClick={() => {
+                                      if (onOpenSectionInCanvas) {
+                                        onOpenSectionInCanvas(sec, book);
+                                      } else if (onOpenBookInCanvas) {
+                                        onOpenBookInCanvas(book);
+                                      }
+                                    }}
+                                  >
+                                    Xem
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </section>
     </div>

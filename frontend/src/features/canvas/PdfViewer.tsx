@@ -21,7 +21,7 @@ if (typeof window !== "undefined" && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
 interface PdfViewerProps {
   pdfUrl?: string;
   initialPage?: number;
-  zoom?: number; // % ví dụ 100
+  zoom?: number; // % ví dụ 100 nghĩa là 100% fit width
   onPageChange?: (page: number, totalPages: number) => void;
   className?: string;
 }
@@ -34,6 +34,7 @@ export function PdfViewer({
   className,
 }: PdfViewerProps) {
   const { t } = useI18n();
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const renderTaskRef = useRef<any>(null);
 
@@ -43,6 +44,26 @@ export function PdfViewer({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [jumpPageInput, setJumpPageInput] = useState(String(initialPage));
+  const [containerWidth, setContainerWidth] = useState(800);
+
+  // Theo dõi chiều rộng container để tự động tính Fit-to-Width hoàn hảo
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      }
+    });
+
+    observer.observe(containerRef.current);
+    if (containerRef.current.clientWidth > 0) {
+      setContainerWidth(containerRef.current.clientWidth);
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   // Tải tài liệu PDF thật từ URL
   useEffect(() => {
@@ -83,7 +104,7 @@ export function PdfViewer({
     }
   }, [initialPage, totalPages]);
 
-  // Render trang PDF lên canvas HTML5
+  // Render trang PDF lên canvas HTML5 với cơ chế Fit-to-Width chính xác
   useEffect(() => {
     if (!pdfDoc || !canvasRef.current) return;
 
@@ -105,9 +126,18 @@ export function PdfViewer({
       const context = canvas.getContext("2d");
       if (!context) return;
 
-      // Tính tỉ lệ phóng to kèm hỗ trợ màn hình Retina (DPR)
-      const scale = (zoom / 100) * 1.5;
-      const viewport = page.getViewport({ scale });
+      // 1. Đo kích thước gốc không scale của trang PDF
+      const unscaledViewport = page.getViewport({ scale: 1.0 });
+
+      // 2. Tính tỷ lệ để trang PDF vừa khít 100% bề rộng container (Fit to Width)
+      const horizontalPadding = 36; // Lề trái phải
+      const availableWidth = Math.max(containerWidth - horizontalPadding, 320);
+      const fitWidthScale = availableWidth / unscaledViewport.width;
+
+      // 3. Tỷ lệ thực tế: 100% zoom tương ứng với đúng 100% Fit trang vào khung nhìn
+      const effectiveScale = fitWidthScale * (zoom / 100);
+
+      const viewport = page.getViewport({ scale: effectiveScale });
       const dpr = window.devicePixelRatio || 1;
 
       canvas.width = Math.floor(viewport.width * dpr);
@@ -146,7 +176,7 @@ export function PdfViewer({
         }
       }
     };
-  }, [pdfDoc, currentPage, zoom]);
+  }, [pdfDoc, currentPage, zoom, containerWidth]);
 
   function handlePrev() {
     if (currentPage > 1) {
@@ -167,10 +197,10 @@ export function PdfViewer({
   }
 
   function handleJump() {
-    const val = parseInt(jumpPageInput, 10);
-    if (!Number.isNaN(val) && val >= 1 && val <= totalPages) {
-      setCurrentPage(val);
-      onPageChange?.(val, totalPages);
+    const p = parseInt(jumpPageInput, 10);
+    if (!isNaN(p) && p >= 1 && p <= totalPages) {
+      setCurrentPage(p);
+      onPageChange?.(p, totalPages);
     } else {
       setJumpPageInput(String(currentPage));
     }
@@ -179,11 +209,14 @@ export function PdfViewer({
   return (
     <div className={cn("flex flex-col h-full min-h-0 bg-muted/10", className)}>
       {/* PDF Controls Header Bar */}
-      <div className="flex h-10 shrink-0 items-center justify-between border-b bg-card/70 px-4 py-1.5 text-xs">
-        <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
-          <FileText className="size-3.5 text-emerald-600" />
-          <span className="font-mono text-[11px] truncate max-w-[200px]">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b bg-card/70 px-4 py-1.5 text-xs select-none">
+        <div className="flex items-center gap-2 text-muted-foreground font-medium min-w-0">
+          <FileText className="size-3.5 text-emerald-600 shrink-0" />
+          <span className="font-mono text-[11px] truncate max-w-[220px]">
             {pdfUrl.split("/").pop()}
+          </span>
+          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded font-medium">
+            Fit 100%
           </span>
         </div>
 
@@ -227,10 +260,13 @@ export function PdfViewer({
       </div>
 
       {/* Main Canvas Scroll Area */}
-      <div className="flex-1 min-h-0 overflow-auto p-4 flex flex-col items-center justify-start">
+      <div
+        ref={containerRef}
+        className="flex-1 min-h-0 overflow-auto p-4 flex flex-col items-center justify-start"
+      >
         {isLoading && (
-          <div className="flex flex-col items-center justify-center py-20 gap-2">
-            <Loader2 className="size-6 animate-spin text-emerald-600" />
+          <div className="flex flex-col items-center justify-center py-24 gap-2">
+            <Loader2 className="size-7 animate-spin text-emerald-600" />
             <p className="text-xs text-muted-foreground">Đang tải và dựng file PDF thật...</p>
           </div>
         )}
@@ -244,7 +280,7 @@ export function PdfViewer({
         )}
 
         {!isLoading && !error && (
-          <div className="rounded-md border bg-card shadow-md overflow-hidden transition-transform duration-100">
+          <div className="rounded-md border bg-card shadow-md overflow-hidden transition-all duration-150 my-auto">
             <canvas ref={canvasRef} className="block select-none" />
           </div>
         )}

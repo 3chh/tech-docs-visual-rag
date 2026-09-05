@@ -9,7 +9,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { AskPanel } from "@/features/ask";
 import { useChatSessions } from "@/features/ask/use-sessions";
 import { DocumentsPanel } from "@/features/documents/DocumentsPanel";
-import { OutlinePanel } from "@/features/outline/OutlinePanel";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
 import {
   loadSettings,
@@ -18,7 +17,7 @@ import {
 } from "@/features/settings/types";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import type { SearchResult, TocBook } from "@/lib/types";
+import type { SearchResult, TocBook, TocSection } from "@/lib/types";
 
 export default function App() {
   const [collection, setCollection] = useState("default");
@@ -68,12 +67,27 @@ export default function App() {
     }
   }
 
-  const areaTitle =
-    area === "ask"
-      ? t("nav_chat")
-      : area === "documents"
-      ? t("nav_documents")
-      : t("nav_outline");
+  // Mở trực tiếp một điều khoản cụ thể từ cây mục lục trong tab Tài liệu sang Canvas
+  async function handleOpenSectionInCanvas(section: TocSection, _book?: TocBook) {
+    setArea("ask");
+    if (section.title && section.title !== "noname") {
+      try {
+        const response = await api.searchBySectionTitle({
+          sectionTitle: section.title,
+          collection,
+          limit: 1,
+          includeBase64: true,
+        });
+        if (response.results[0]) {
+          setActiveSource(response.results[0]);
+        }
+      } catch {
+        // Fallback
+      }
+    }
+  }
+
+  const areaTitle = area === "ask" ? t("nav_chat") : t("nav_documents");
 
   return (
     <SidebarProvider>
@@ -131,7 +145,7 @@ export default function App() {
               </TooltipContent>
             </Tooltip>
 
-            {/* System & Collection Settings Dialog */}
+            {/* System Settings Dialog */}
             <SettingsDialog
               open={isSettingsOpen}
               onOpenChange={setIsSettingsOpen}
@@ -142,7 +156,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* Main Content Area */}
+        {/* Main Content Area: Chỉ còn 2 tab chính tinh gọn */}
         <main className="min-h-0 flex-1 overflow-hidden">
           {area === "ask" && (
             <AskPanel
@@ -159,13 +173,12 @@ export default function App() {
             <div className="h-full overflow-y-auto">
               <DocumentsPanel
                 collection={collection}
-                overrides={settings.processing}
+                onCollectionChange={setCollection}
                 onOpenBookInCanvas={handleOpenBookInCanvas}
+                onOpenSectionInCanvas={handleOpenSectionInCanvas}
               />
             </div>
           )}
-
-          {area === "outline" && <OutlinePanel collection={collection} />}
         </main>
       </SidebarInset>
     </SidebarProvider>

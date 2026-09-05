@@ -237,11 +237,13 @@ export function LockedSetting({
   value,
   note,
   tooltip,
+  mono,
 }: {
   label: string;
   value: string | number | boolean;
   note?: string;
   tooltip?: string;
+  mono?: boolean;
 }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2.5">
@@ -263,7 +265,7 @@ export function LockedSetting({
         </div>
         {note && <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>}
       </div>
-      <span className="rounded bg-muted/60 px-2 py-1 font-mono text-xs text-muted-foreground">
+      <span className={cn("rounded bg-muted/60 px-2 py-1 text-xs text-muted-foreground", mono && "font-mono")}>
         {String(value)}
       </span>
     </div>
@@ -284,5 +286,112 @@ export function SettingGroup({
       </h4>
       <div className="divide-y rounded-md border bg-card/60 px-3 py-1">{children}</div>
     </div>
+  );
+}
+
+export function NumberRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  unit,
+  tooltip,
+  hint,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  unit?: string;
+  tooltip?: string;
+  hint?: string;
+  onChange: (val: number) => void;
+}) {
+  return (
+    <Row
+      label={label}
+      hint={hint}
+      tooltip={tooltip}
+      control={
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="number"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              if (!Number.isNaN(val)) onChange(val);
+            }}
+            className="h-8 w-24 font-mono tabular text-xs"
+          />
+          {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
+        </div>
+      }
+    />
+  );
+}
+
+export function BooleanRow({
+  label,
+  value,
+  tooltip,
+  hint,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  tooltip?: string;
+  hint?: string;
+  onChange: (val: boolean) => void;
+}) {
+  return (
+    <Row
+      label={label}
+      hint={hint}
+      tooltip={tooltip}
+      control={
+        <Switch
+          checked={value}
+          onCheckedChange={onChange}
+        />
+      }
+    />
+  );
+}
+
+export function TextRow({
+  label,
+  value,
+  tooltip,
+  hint,
+  mono,
+  onChange,
+}: {
+  label: string;
+  value?: string;
+  tooltip?: string;
+  hint?: string;
+  mono?: boolean;
+  onChange: (val: string) => void;
+}) {
+  return (
+    <Row
+      label={label}
+      hint={hint}
+      tooltip={tooltip}
+      control={
+        <Input
+          type="text"
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn("h-8 w-44 text-xs", mono && "font-mono")}
+        />
+      }
+    />
   );
 }

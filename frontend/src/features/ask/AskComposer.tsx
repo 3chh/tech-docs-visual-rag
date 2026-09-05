@@ -36,7 +36,7 @@ export function AskComposer({
   return (
     <div className="shrink-0 border-t bg-background">
       <div className="mx-auto w-full max-w-[48rem] px-6 py-4">
-        <div className="relative">
+        <div className="relative flex items-center rounded-xl border bg-card shadow-xs transition-all focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/25 px-3 py-1.5">
           <Label htmlFor="ask-input" className="sr-only">
             Câu hỏi về tài liệu
           </Label>
@@ -58,19 +58,16 @@ export function AskComposer({
               }
             }}
             className={cn(
-              "w-full resize-none rounded-lg border bg-card py-3 pl-4 pr-12",
+              "w-full resize-none border-0 bg-transparent py-1.5 pl-1 pr-3",
               "text-[15px] leading-relaxed placeholder:text-muted-foreground",
-              "focus-visible:border-ring focus-visible:outline-none",
-              "focus-visible:ring-[3px] focus-visible:ring-ring/25",
+              "focus:outline-none focus-visible:ring-0",
               "disabled:cursor-not-allowed disabled:opacity-60",
             )}
           />
           <Button
             size="icon"
             className={cn(
-              "absolute bottom-2 right-2 size-8",
-              // shadcn dùng disabled:opacity-50 khiến nút emerald hoá mờ,
-              // nhìn như lỗi render. Đổi hẳn màu cho rõ trạng thái.
+              "shrink-0 size-8 self-center rounded-lg transition-colors",
               "disabled:!opacity-100 disabled:bg-muted disabled:text-muted-foreground",
             )}
             onClick={onSubmit}
