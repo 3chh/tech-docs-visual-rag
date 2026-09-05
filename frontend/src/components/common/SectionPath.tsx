@@ -20,13 +20,13 @@ export function SectionPath({
   return (
     <nav
       aria-label="Mục cha"
-      className={cn("flex min-w-0 flex-wrap items-center gap-0.5 text-xs", className)}
+      className={cn("flex min-w-0 flex-wrap items-center gap-0.5 text-sm", className)}
     >
       {ancestors.map((ancestor, i) => (
         <span key={`${ancestor}-${i}`} className="flex min-w-0 items-center gap-0.5">
           {i > 0 && (
             <ChevronRight
-              className="size-3 shrink-0 text-muted-foreground/60"
+              className="size-3.5 shrink-0 text-muted-foreground/60"
               aria-hidden
             />
           )}

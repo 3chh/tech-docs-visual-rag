@@ -18,7 +18,7 @@ export function AnswerBlock({
     <article className="space-y-3.5">
       {/* Câu hỏi căn phải để phân biệt với câu trả lời */}
       <div className="flex justify-end">
-        <p className="max-w-[85%] whitespace-pre-wrap rounded-md rounded-br-sm border bg-card px-3 py-2 text-[13px]">
+        <p className="max-w-[85%] whitespace-pre-wrap rounded-md rounded-br-sm border bg-card px-3 py-2 text-[15px]">
           {turn.question}
         </p>
       </div>
@@ -30,7 +30,7 @@ export function AnswerBlock({
         <div className="space-y-3.5">
           {turn.rewrittenQuery && <RewriteNote rewritten={turn.rewrittenQuery} />}
 
-          <div className="whitespace-pre-wrap text-[13px] leading-relaxed">
+          <div className="whitespace-pre-wrap text-[15px] leading-relaxed">
             {turn.answer}
           </div>
 
@@ -59,8 +59,8 @@ export function AnswerBlock({
 
 function RewriteNote({ rewritten }: { rewritten: string }) {
   return (
-    <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-      <Wand2 className="mt-0.5 size-3 shrink-0" aria-hidden />
+    <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+      <Wand2 className="mt-0.5 size-3.5 shrink-0" aria-hidden />
       <span>
         Đã tìm theo thuật ngữ trong tài liệu:{" "}
         <span className="text-foreground">{rewritten}</span>
@@ -94,7 +94,7 @@ function SourceRow({
     >
       <span
         className={cn(
-          "mt-px flex size-4 shrink-0 items-center justify-center rounded-sm font-mono text-[10px] tabular",
+          "mt-px flex size-4 shrink-0 items-center justify-center rounded-sm font-mono text-xs tabular",
           isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
         )}
         aria-hidden
@@ -103,12 +103,12 @@ function SourceRow({
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium">
+        <span className="block truncate text-[15px] font-medium">
           {source.section_title || "Mục không có tiêu đề"}
         </span>
         {source.ancestors.length > 0 && (
           <span
-            className="block truncate text-xs text-muted-foreground"
+            className="block truncate text-sm text-muted-foreground"
             title={source.ancestors.join(" › ")}
           >
             {source.ancestors.join(" › ")}
@@ -126,8 +126,8 @@ function SourceRow({
 function PendingState() {
   return (
     <div className="space-y-2.5" aria-busy="true" aria-label="Đang tra cứu">
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Search className="size-3 animate-pulse" aria-hidden />
+      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Search className="size-3.5 animate-pulse" aria-hidden />
         Đang tìm mục liên quan rồi đọc ảnh tài liệu...
       </p>
       <Skeleton className="h-3.5 w-4/5" />
@@ -143,11 +143,11 @@ function ErrorState({ message }: { message?: string }) {
       role="alert"
       className="rounded-md border border-destructive/30 bg-destructive/[0.04] px-3 py-2.5"
     >
-      <p className="flex items-center gap-1.5 text-[13px] font-medium text-destructive">
-        <AlertCircle className="size-3.5 shrink-0" aria-hidden />
+      <p className="flex items-center gap-1.5 text-[15px] font-medium text-destructive">
+        <AlertCircle className="size-4 shrink-0" aria-hidden />
         Không tra cứu được
       </p>
-      {message && <p className="mt-1 pl-5 text-xs text-muted-foreground">{message}</p>}
+      {message && <p className="mt-1 pl-5 text-sm text-muted-foreground">{message}</p>}
     </div>
   );
 }
@@ -156,11 +156,11 @@ function ErrorState({ message }: { message?: string }) {
 export function NoResultNote() {
   return (
     <div className="rounded-md border border-dashed bg-card/50 px-3 py-2.5">
-      <p className="flex items-center gap-1.5 text-[13px] font-medium">
-        <FileSearch className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <p className="flex items-center gap-1.5 text-[15px] font-medium">
+        <FileSearch className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         Không tìm thấy mục nào phù hợp
       </p>
-      <p className="mt-1 pl-5 text-xs text-muted-foreground">
+      <p className="mt-1 pl-5 text-sm text-muted-foreground">
         Thử dùng từ ngữ gần với tiêu đề mục trong tài liệu, hoặc kiểm tra bộ tài liệu
         đã được đánh chỉ mục chưa.
       </p>

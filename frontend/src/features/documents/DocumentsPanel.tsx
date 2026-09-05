@@ -79,10 +79,10 @@ export function DocumentsPanel({ collection }: { collection: string }) {
   return (
     <div className="mx-auto w-full max-w-[55rem] space-y-6 px-6 py-6">
       <header>
-        <h1 className="text-base font-semibold tracking-tight">
+        <h1 className="text-lg font-semibold tracking-tight">
           Tài liệu trong <span className="font-mono">{collection}</span>
         </h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-sm text-muted-foreground">
           Mỗi PDF thành một cuốn. Hệ thống nhận diện bố cục, tách theo mục lục rồi
           đánh chỉ mục từng mục.
         </p>
@@ -109,7 +109,7 @@ export function DocumentsPanel({ collection }: { collection: string }) {
       {rejected.length > 0 && (
         <ul className="space-y-0.5" role="alert">
           {rejected.map((message) => (
-            <li key={message} className="text-xs text-destructive">
+            <li key={message} className="text-sm text-destructive">
               {message}
             </li>
           ))}
@@ -123,7 +123,7 @@ export function DocumentsPanel({ collection }: { collection: string }) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-xs"
+                className="h-6 px-2 text-sm"
                 onClick={() => setQueue([])}
                 disabled={isBusy}
               >
@@ -165,7 +165,7 @@ export function DocumentsPanel({ collection }: { collection: string }) {
               )}
             </Button>
             {isBusy && (
-              <p className="text-xs text-muted-foreground" role="status">
+              <p className="text-sm text-muted-foreground" role="status">
                 Sách vài trăm trang có thể mất 20 phút. Đừng đóng tab.
               </p>
             )}
@@ -200,14 +200,14 @@ export function DocumentsPanel({ collection }: { collection: string }) {
           <ul className="divide-y rounded-md border bg-card">
             {books.map((book) => (
               <li key={book.book_index} className="flex items-start gap-2.5 p-3">
-                <span className="mt-px flex size-4 shrink-0 items-center justify-center rounded-sm bg-muted font-mono text-[10px] tabular">
+                <span className="mt-px flex size-4 shrink-0 items-center justify-center rounded-sm bg-muted font-mono text-xs tabular">
                   {book.book_index}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium leading-snug">
+                  <p className="text-[15px] font-medium leading-snug">
                     {book.title ?? `Cuốn ${book.book_index}`}
                   </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground tabular">
+                  <p className="mt-0.5 text-sm text-muted-foreground tabular">
                     {book.total_sections} mục · {book.total_pages} trang
                   </p>
                 </div>
@@ -233,7 +233,7 @@ function ResultSummary({ result }: { result: UploadResponse }) {
       {entries.length > 0 && (
         <ul className="mt-2 space-y-0.5 border-t pt-2">
           {entries.map(([name, pages]) => (
-            <li key={name} className="flex items-baseline justify-between gap-3 text-xs">
+            <li key={name} className="flex items-baseline justify-between gap-3 text-sm">
               <span className="truncate font-mono">{name}</span>
               <span className="shrink-0 tabular">{pages} mục</span>
             </li>
@@ -244,7 +244,7 @@ function ResultSummary({ result }: { result: UploadResponse }) {
       {result.errors.length > 0 && (
         <ul className="mt-2 space-y-0.5 border-t pt-2">
           {result.errors.map((error, i) => (
-            <li key={i} className="text-xs text-destructive">
+            <li key={i} className="text-sm text-destructive">
               {error}
             </li>
           ))}
@@ -278,14 +278,14 @@ function Callout({
       <div className="flex items-start gap-2">
         <Icon
           className={cn(
-            "mt-0.5 size-3.5 shrink-0",
+            "mt-0.5 size-4 shrink-0",
             variant === "success" ? "text-primary" : "text-destructive",
           )}
           aria-hidden
         />
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium">{title}</p>
-          <div className="mt-0.5 text-xs text-muted-foreground">{children}</div>
+          <p className="text-[15px] font-medium">{title}</p>
+          <div className="mt-0.5 text-sm text-muted-foreground">{children}</div>
         </div>
       </div>
     </div>

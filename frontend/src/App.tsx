@@ -42,27 +42,22 @@ export default function App() {
                 onClick={() => setArea(id)}
                 aria-current={area === id ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[15px] transition-colors",
                   "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25",
                   area === id
                     ? "bg-secondary font-medium text-secondary-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
               >
-                <Icon className="size-3.5" aria-hidden />
+                <Icon className="size-4" aria-hidden />
                 {label}
               </button>
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-1.5">
-            <span className="hidden text-xs text-muted-foreground sm:inline">
-              bộ tài liệu
-            </span>
-            <span className="rounded-sm border bg-card px-1.5 py-0.5 font-mono text-xs">
-              {collection}
-            </span>
-          </div>
+          <span className="ml-auto rounded-md border bg-card px-2 py-1 font-mono text-sm">
+            {collection}
+          </span>
         </header>
 
         <main className="min-h-0 flex-1 overflow-hidden">

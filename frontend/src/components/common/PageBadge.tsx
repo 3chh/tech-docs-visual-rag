@@ -18,7 +18,7 @@ export function PageBadge({
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5",
-        "border-highlight-border bg-highlight font-mono text-[11px] leading-none",
+        "border-highlight-border bg-highlight font-mono text-sm leading-none",
         "text-highlight-foreground tabular",
         className,
       )}
@@ -50,7 +50,7 @@ export function PageBadgeList({
         <PageBadge key={page} page={page} />
       ))}
       {hidden > 0 && (
-        <span className="text-[11px] text-muted-foreground tabular">+{hidden}</span>
+        <span className="text-sm text-muted-foreground tabular">+{hidden}</span>
       )}
     </span>
   );

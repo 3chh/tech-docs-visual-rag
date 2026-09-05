@@ -67,8 +67,8 @@ export function OutlinePanel({ collection }: { collection: string }) {
         <div className="mx-auto w-full max-w-[52rem] space-y-5 px-6 py-6">
           <header className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-base font-semibold tracking-tight">Mục lục</h1>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <h1 className="text-lg font-semibold tracking-tight">Mục lục</h1>
+              <p className="mt-0.5 text-sm text-muted-foreground">
                 Cây mục do hệ thống nhận diện từ bố cục trang, sau đó LLM sửa lại phân cấp.
               </p>
             </div>
@@ -78,7 +78,7 @@ export function OutlinePanel({ collection }: { collection: string }) {
               onClick={() => void refetch()}
               disabled={isFetching}
             >
-              <RefreshCw className={cn("size-3.5", isFetching && "animate-spin")} aria-hidden />
+              <RefreshCw className={cn("size-4", isFetching && "animate-spin")} aria-hidden />
               Tải lại
             </Button>
           </header>
@@ -88,10 +88,10 @@ export function OutlinePanel({ collection }: { collection: string }) {
           {isError && (
             <div
               role="alert"
-              className="rounded-md border border-destructive/30 bg-destructive/[0.04] px-3 py-2.5 text-[13px]"
+              className="rounded-md border border-destructive/30 bg-destructive/[0.04] px-3 py-2.5 text-[15px]"
             >
               <p className="font-medium text-destructive">Không đọc được mục lục</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-sm text-muted-foreground">
                 Kiểm tra backend đã chạy chưa.
               </p>
             </div>
@@ -191,18 +191,18 @@ function BookGroup({
         className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25"
       >
         {expanded ? (
-          <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <ChevronDown className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
         ) : (
-          <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
         )}
-        <span className="mt-px flex size-4 shrink-0 items-center justify-center rounded-sm bg-muted font-mono text-[10px] tabular">
+        <span className="mt-px flex size-4 shrink-0 items-center justify-center rounded-sm bg-muted font-mono text-xs tabular">
           {book.book_index}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-medium leading-snug">
+          <span className="block text-[15px] font-medium leading-snug">
             {book.title ?? `Cuốn ${book.book_index}`}
           </span>
-          <span className="mt-0.5 block text-xs text-muted-foreground tabular">
+          <span className="mt-0.5 block text-sm text-muted-foreground tabular">
             {book.total_sections} mục · {book.total_pages} trang
           </span>
         </span>
@@ -257,17 +257,17 @@ function SectionRow({
       // Thụt lề theo độ sâu thật của mục trong cây, tối đa 3 bậc.
       style={{ paddingLeft: `${0.75 + Math.min(depth, 3) * 1.15}rem` }}
     >
-      <span className="min-w-0 flex-1 truncate text-[13px]" title={section.title}>
+      <span className="min-w-0 flex-1 truncate text-[15px]" title={section.title}>
         {isPlaceholder ? "Bìa và mục lục" : section.title}
       </span>
 
       {isLoading && (
-        <span className="shrink-0 text-[11px] text-muted-foreground">đang mở...</span>
+        <span className="shrink-0 text-sm text-muted-foreground">đang mở...</span>
       )}
 
       {typeof section.formulas === "number" && section.formulas > 0 && (
-        <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground tabular">
-          <Sigma className="size-3" aria-hidden />
+        <span className="flex shrink-0 items-center gap-0.5 text-sm text-muted-foreground tabular">
+          <Sigma className="size-3.5" aria-hidden />
           {section.formulas}
         </span>
       )}

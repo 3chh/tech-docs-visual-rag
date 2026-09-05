@@ -16,8 +16,8 @@ export function StatTile({
 }) {
   return (
     <div className={cn("rounded-md border bg-card px-3.5 py-3", className)}>
-      <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        {Icon && <Icon className="size-3.5" aria-hidden />}
+      <dt className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        {Icon && <Icon className="size-4" aria-hidden />}
         {label}
       </dt>
       <dd className="mt-1 font-mono text-lg leading-tight tabular">{value}</dd>

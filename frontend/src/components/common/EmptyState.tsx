@@ -31,9 +31,9 @@ export function EmptyState({
       )}
     >
       <Icon className="mx-auto size-6 text-muted-foreground/70" aria-hidden />
-      <h3 className="mt-3 text-[13px] font-medium">{title}</h3>
+      <h3 className="mt-3 text-[15px] font-medium">{title}</h3>
       {description && (
-        <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-muted-foreground">
+        <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
           {description}
         </p>
       )}

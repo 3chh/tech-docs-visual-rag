@@ -1,40 +1,33 @@
-import { ArrowUp, Loader2, Wand2 } from "lucide-react";
+import { ArrowUp, Loader2 } from "lucide-react";
 import { useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
-const TOP_K_OPTIONS = [3, 5, 8, 12];
-const MAX_TEXTAREA_HEIGHT = 160;
+const MAX_TEXTAREA_HEIGHT = 180;
 
 export interface AskOptions {
   topK: number;
   useTocRewrite: boolean;
 }
 
+/**
+ * Khung nhập câu hỏi. Chỉ có ô nhập và nút gửi.
+ *
+ * Các tuỳ chọn (chuẩn hoá thuật ngữ, số mục lấy về) nằm trên thanh công cụ ở
+ * đầu trang, không nhồi vào đây.
+ */
 export function AskComposer({
   value,
   onChange,
   onSubmit,
-  options,
-  onOptionsChange,
   isBusy,
   placeholder,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
-  options: AskOptions;
-  onOptionsChange: (options: AskOptions) => void;
   isBusy: boolean;
   placeholder: string;
 }) {
@@ -46,8 +39,8 @@ export function AskComposer({
   }
 
   return (
-    <div className="border-t bg-background">
-      <div className="mx-auto w-full max-w-[46rem] space-y-2 px-6 py-3.5">
+    <div className="shrink-0 border-t bg-background">
+      <div className="mx-auto w-full max-w-[48rem] px-6 py-4">
         <div className="relative">
           <Label htmlFor="ask-input" className="sr-only">
             Câu hỏi về tài liệu
@@ -70,8 +63,8 @@ export function AskComposer({
               }
             }}
             className={cn(
-              "w-full resize-none rounded-md border bg-card py-2.5 pl-3 pr-10",
-              "text-[13px] leading-relaxed placeholder:text-muted-foreground",
+              "w-full resize-none rounded-lg border bg-card py-3 pl-4 pr-12",
+              "text-[15px] leading-relaxed placeholder:text-muted-foreground",
               "focus-visible:border-ring focus-visible:outline-none",
               "focus-visible:ring-[3px] focus-visible:ring-ring/25",
               "disabled:cursor-not-allowed disabled:opacity-60",
@@ -79,70 +72,18 @@ export function AskComposer({
           />
           <Button
             size="icon"
-            className="absolute bottom-1.5 right-1.5 size-7"
+            className="absolute bottom-2 right-2 size-8"
             onClick={onSubmit}
             disabled={isBusy || !value.trim()}
             aria-label="Gửi câu hỏi"
           >
             {isBusy ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              <Loader2 className="size-4 animate-spin" aria-hidden />
             ) : (
-              <ArrowUp className="size-3.5" aria-hidden />
+              <ArrowUp className="size-4" aria-hidden />
             )}
           </Button>
         </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="toc-rewrite"
-              checked={options.useTocRewrite}
-              disabled={isBusy}
-              onCheckedChange={(checked) =>
-                onOptionsChange({ ...options, useTocRewrite: checked })
-              }
-            />
-            <Label
-              htmlFor="toc-rewrite"
-              className="flex cursor-pointer items-center gap-1 text-xs font-normal text-muted-foreground"
-            >
-              <Wand2 className="size-3" aria-hidden />
-              Chuẩn hoá thuật ngữ theo mục lục
-            </Label>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Label htmlFor="top-k" className="text-xs font-normal text-muted-foreground">
-              Số mục lấy về
-            </Label>
-            <Select
-              value={String(options.topK)}
-              disabled={isBusy}
-              onValueChange={(next) =>
-                onOptionsChange({ ...options, topK: Number(next) })
-              }
-            >
-              <SelectTrigger
-                id="top-k"
-                size="sm"
-                className="h-7 w-[4.5rem] font-mono text-xs tabular"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TOP_K_OPTIONS.map((n) => (
-                  <SelectItem key={n} value={String(n)} className="font-mono tabular">
-                    {n}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <p className="text-[11px] text-muted-foreground">
-          Enter để gửi, Shift+Enter để xuống dòng. Một lượt tra cứu có thể mất vài phút.
-        </p>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { SourceView } from "@/features/source";
 
 import { AnswerBlock } from "./AnswerBlock";
 import { AskComposer, type AskOptions } from "./AskComposer";
+import { AskToolbar } from "./AskToolbar";
 
 const SAMPLE_QUESTIONS = [
   "Mục nào quy định về tải trọng thiết kế?",
@@ -89,6 +90,8 @@ export function AskPanel({ collection }: { collection: string }) {
   return (
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
+        <AskToolbar options={options} onChange={setOptions} disabled={isBusy} />
+
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-[46rem] space-y-7 px-6 py-6">
             {turns.length === 0 ? (
@@ -103,7 +106,7 @@ export function AskPanel({ collection }: { collection: string }) {
                         <button
                           type="button"
                           onClick={() => setDraft(question)}
-                          className="w-full rounded-md border bg-card px-3 py-2 text-left text-[13px] transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25"
+                          className="w-full rounded-md border bg-card px-3 py-2 text-left text-[15px] transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25"
                         >
                           {question}
                         </button>
@@ -129,10 +132,8 @@ export function AskPanel({ collection }: { collection: string }) {
           value={draft}
           onChange={setDraft}
           onSubmit={() => void ask()}
-          options={options}
-          onOptionsChange={setOptions}
           isBusy={isBusy}
-          placeholder={`Hỏi về tài liệu trong ${collection}...`}
+          placeholder="Hỏi về nội dung tài liệu..."
         />
       </div>
 

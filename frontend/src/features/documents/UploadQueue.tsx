@@ -81,10 +81,10 @@ export function UploadDropzone({
           className="flex w-full flex-col items-center gap-1.5 px-6 py-8 text-center focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/25"
         >
           <Upload className="size-5 text-muted-foreground/70" aria-hidden />
-          <span className="text-[13px] font-medium">
+          <span className="text-[15px] font-medium">
             Kéo PDF vào đây, hoặc bấm để chọn
           </span>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             Chỉ nhận PDF, tối đa {MAX_FILE_MB}MB mỗi file
           </span>
         </button>
@@ -128,17 +128,17 @@ export function FileConfigRow({
 
         <div className="min-w-0 flex-1 space-y-2.5">
           <div className="flex items-baseline justify-between gap-3">
-            <p className="truncate font-mono text-xs" title={item.file.name}>
+            <p className="truncate font-mono text-sm" title={item.file.name}>
               {item.file.name}
             </p>
-            <span className="shrink-0 text-[11px] text-muted-foreground tabular">
+            <span className="shrink-0 text-sm text-muted-foreground tabular">
               {sizeMb} MB
             </span>
           </div>
 
           <div className="grid gap-2.5 sm:grid-cols-[1fr_7rem]">
             <div className="space-y-1">
-              <Label htmlFor={nameId} className="text-xs font-normal text-muted-foreground">
+              <Label htmlFor={nameId} className="text-sm font-normal text-muted-foreground">
                 Tên hiển thị
               </Label>
               <Input
@@ -151,7 +151,7 @@ export function FileConfigRow({
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor={pagesId} className="text-xs font-normal text-muted-foreground">
+              <Label htmlFor={pagesId} className="text-sm font-normal text-muted-foreground">
                 Giới hạn trang
               </Label>
               <Input
@@ -179,7 +179,7 @@ export function FileConfigRow({
             />
             <Label
               htmlFor={splitId}
-              className="cursor-pointer text-xs font-normal text-muted-foreground"
+              className="cursor-pointer text-sm font-normal text-muted-foreground"
             >
               Tách đôi trang (sách scan hai trang trên một tờ)
             </Label>
@@ -194,7 +194,7 @@ export function FileConfigRow({
           disabled={disabled}
           aria-label={`Bỏ ${item.file.name} khỏi danh sách`}
         >
-          <Trash2 className="size-3.5" aria-hidden />
+          <Trash2 className="size-4" aria-hidden />
         </Button>
       </div>
     </div>

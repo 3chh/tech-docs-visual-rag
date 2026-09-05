@@ -33,11 +33,11 @@ export function SourcePanel({
       <header className="flex items-start gap-2 border-b px-4 py-3">
         <div className="min-w-0 flex-1">
           <SectionPath ancestors={source.ancestors} className="mb-1" />
-          <h2 className="text-[13px] font-medium leading-snug">
+          <h2 className="text-[15px] font-medium leading-snug">
             {source.section_title || "Mục không có tiêu đề"}
           </h2>
           {fileName && (
-            <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+            <p className="mt-1 truncate font-mono text-sm text-muted-foreground">
               {fileName}
             </p>
           )}
@@ -50,7 +50,7 @@ export function SourcePanel({
             onClick={onClose}
             aria-label="Đóng chi tiết nguồn"
           >
-            <X className="size-3.5" aria-hidden />
+            <X className="size-4" aria-hidden />
           </Button>
         )}
       </header>
@@ -59,8 +59,8 @@ export function SourcePanel({
         <div className="flex flex-wrap items-center gap-2 border-b bg-background/60 px-4 py-2">
           <PageBadgeList pages={source.section_pages} max={6} />
           {source.formulas.length > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular">
-              <Sigma className="size-3" aria-hidden />
+            <span className="inline-flex items-center gap-1 text-sm text-muted-foreground tabular">
+              <Sigma className="size-3.5" aria-hidden />
               {source.formulas.length} công thức
             </span>
           )}
@@ -80,11 +80,11 @@ export function SourcePanel({
                     key={i}
                     className="rounded-md border bg-background px-2.5 py-2"
                   >
-                    <p className="break-words font-mono text-[11px] leading-relaxed">
+                    <p className="break-words font-mono text-sm leading-relaxed">
                       {formula.content || "(không đọc được nội dung)"}
                     </p>
                     {formula.page && (
-                      <p className="mt-1 font-mono text-[10px] text-muted-foreground tabular">
+                      <p className="mt-1 font-mono text-xs text-muted-foreground tabular">
                         trang {formula.page}
                       </p>
                     )}
@@ -97,7 +97,7 @@ export function SourcePanel({
           {source.chunk_images.length > 0 && (
             <div className="space-y-2">
               <SectionHeading>Trang gốc ({source.chunk_images.length})</SectionHeading>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Từng trang trước khi ghép, để đối chiếu với bản in.
               </p>
               <ul className="grid grid-cols-2 gap-2">
@@ -125,12 +125,12 @@ function MergedImage({ source }: { source: SearchResult }) {
     return (
       <div className="rounded-md border border-dashed bg-background px-4 py-8 text-center">
         <FileWarning className="mx-auto size-5 text-muted-foreground/70" aria-hidden />
-        <p className="mt-2 text-xs font-medium">Không tải được ảnh của mục này</p>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-2 text-sm font-medium">Không tải được ảnh của mục này</p>
+        <p className="mt-1 text-sm text-muted-foreground">
           Backend và worker phải dùng chung volume dữ liệu.
         </p>
         {source.image_path && (
-          <p className="mt-2 break-all font-mono text-[10px] text-muted-foreground">
+          <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
             {source.image_path}
           </p>
         )}
@@ -146,7 +146,7 @@ function MergedImage({ source }: { source: SearchResult }) {
         className="w-full rounded-md border bg-white"
         loading="lazy"
       />
-      <figcaption className="text-xs text-muted-foreground">
+      <figcaption className="text-sm text-muted-foreground">
         Ảnh ghép của toàn mục, đã bỏ số trang ở chân trang.
       </figcaption>
     </figure>

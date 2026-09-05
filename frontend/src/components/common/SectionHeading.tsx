@@ -22,7 +22,7 @@ export function SectionHeading({
         className,
       )}
     >
-      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
         {children}
       </h3>
       {action}

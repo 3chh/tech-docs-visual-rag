@@ -46,8 +46,8 @@
     --card-foreground: oklch(0.22 0.008 60);
     --popover-foreground: oklch(0.22 0.008 60);
 
-    /* Mực bút xanh: accent duy nhất của toàn app */
-    --primary: oklch(0.47 0.15 258);
+    /* Xanh emerald: accent duy nhất của toàn app */
+    --primary: oklch(0.505 0.115 164);
     --primary-foreground: oklch(0.99 0.003 90);
 
     --secondary: oklch(0.965 0.004 85);
@@ -63,23 +63,23 @@
     /* Kẻ mảnh thay cho shadow */
     --border: oklch(0.875 0.005 80);
     --input: oklch(0.845 0.006 80);
-    --ring: oklch(0.47 0.15 258);
+    --ring: oklch(0.505 0.115 164);
 
-    /* Bút đánh dấu: CHỈ dùng cho số trang in trên giấy.
+    /* Nhấn nhẹ: CHỈ dùng cho số trang in trên giấy.
        Đó là thứ người dùng cần nhặt ra khỏi trang nhanh nhất. */
-    --highlight: oklch(0.945 0.085 95);
-    --highlight-foreground: oklch(0.32 0.05 75);
-    --highlight-border: oklch(0.87 0.09 92);
+    --highlight: oklch(0.955 0.038 164);
+    --highlight-foreground: oklch(0.37 0.085 164);
+    --highlight-border: oklch(0.885 0.05 164);
 
     /* Sidebar tối hơn nền chính một bậc để phân vùng */
     --sidebar: oklch(0.972 0.004 88);
     --sidebar-foreground: oklch(0.24 0.008 60);
-    --sidebar-primary: oklch(0.47 0.15 258);
+    --sidebar-primary: oklch(0.505 0.115 164);
     --sidebar-primary-foreground: oklch(0.99 0.003 90);
     --sidebar-accent: oklch(0.93 0.006 85);
     --sidebar-accent-foreground: oklch(0.22 0.008 60);
     --sidebar-border: oklch(0.87 0.005 80);
-    --sidebar-ring: oklch(0.47 0.15 258);
+    --sidebar-ring: oklch(0.505 0.115 164);
   }
 
   /* Dark mode giữ đủ token để đổi được, nhưng không phải mặc định. */
@@ -92,7 +92,7 @@
     --card-foreground: oklch(0.965 0.004 85);
     --popover-foreground: oklch(0.965 0.004 85);
 
-    --primary: oklch(0.68 0.14 258);
+    --primary: oklch(0.72 0.14 164);
     --primary-foreground: oklch(0.175 0.006 60);
 
     --secondary: oklch(0.275 0.008 60);
@@ -107,20 +107,20 @@
 
     --border: oklch(1 0 0 / 11%);
     --input: oklch(1 0 0 / 14%);
-    --ring: oklch(0.68 0.14 258);
+    --ring: oklch(0.72 0.14 164);
 
-    --highlight: oklch(0.42 0.08 95);
-    --highlight-foreground: oklch(0.95 0.05 95);
-    --highlight-border: oklch(0.5 0.09 95);
+    --highlight: oklch(0.33 0.055 164);
+    --highlight-foreground: oklch(0.9 0.075 164);
+    --highlight-border: oklch(0.42 0.07 164);
 
     --sidebar: oklch(0.2 0.006 60);
     --sidebar-foreground: oklch(0.95 0.004 85);
-    --sidebar-primary: oklch(0.68 0.14 258);
+    --sidebar-primary: oklch(0.72 0.14 164);
     --sidebar-primary-foreground: oklch(0.175 0.006 60);
     --sidebar-accent: oklch(0.28 0.008 60);
     --sidebar-accent-foreground: oklch(0.965 0.004 85);
     --sidebar-border: oklch(1 0 0 / 11%);
-    --sidebar-ring: oklch(0.68 0.14 258);
+    --sidebar-ring: oklch(0.72 0.14 164);
   }
 }
 
@@ -172,8 +172,8 @@
   body {
     @apply bg-background text-foreground;
     /* Bậc chữ thân 13px: app tra cứu cần dày thông tin */
-    font-size: 13px;
-    line-height: 1.55;
+    font-size: 14.5px;
+    line-height: 1.6;
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;

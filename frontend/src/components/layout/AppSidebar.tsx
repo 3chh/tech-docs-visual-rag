@@ -1,4 +1,4 @@
-import { BookOpen, Layers, Plus, RefreshCw } from "lucide-react";
+import { BookOpen, Layers, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupAction,
   SidebarGroupContent,
@@ -17,8 +16,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSkeleton,
 } from "@/components/ui/sidebar";
-import { useCollections, useHealth } from "@/hooks/use-api";
-import { cn } from "@/lib/utils";
+import { useCollections } from "@/hooks/use-api";
 
 interface AppSidebarProps {
   collection: string;
@@ -26,8 +24,7 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ collection, onCollectionChange }: AppSidebarProps) {
-  const { data: collections, isLoading, isError, refetch, isFetching } = useCollections();
-  const { data: health } = useHealth();
+  const { data: collections, isLoading, isError, refetch } = useCollections();
   const [isAdding, setIsAdding] = useState(false);
   const [draft, setDraft] = useState("");
 
@@ -43,21 +40,20 @@ export function AppSidebar({ collection, onCollectionChange }: AppSidebarProps) 
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b px-4 py-3.5 group-data-[collapsible=icon]:px-2">
+      <SidebarHeader className="border-b px-4 py-4 group-data-[collapsible=icon]:px-2">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/12 text-primary">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/12 text-primary">
             <BookOpen className="size-4" aria-hidden />
           </div>
-          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-            <p className="truncate text-sm font-semibold leading-tight">Cosmo ChatPDF</p>
-            <p className="truncate text-xs text-muted-foreground">Visual RAG cấp mục</p>
-          </div>
+          <p className="min-w-0 truncate font-semibold leading-tight group-data-[collapsible=icon]:hidden">
+            Cosmo ChatPDF
+          </p>
         </div>
       </SidebarHeader>
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Bộ tài liệu</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-sm">Bộ tài liệu</SidebarGroupLabel>
           <SidebarGroupAction
             title="Thêm bộ tài liệu"
             onClick={() => setIsAdding((v) => !v)}
@@ -82,7 +78,7 @@ export function AppSidebar({ collection, onCollectionChange }: AppSidebarProps) 
                   }}
                   onBlur={commitDraft}
                   placeholder="Tên bộ tài liệu"
-                  className="h-8 text-sm"
+                  className="h-9"
                   aria-label="Tên bộ tài liệu mới"
                 />
               </div>
@@ -100,13 +96,12 @@ export function AppSidebar({ collection, onCollectionChange }: AppSidebarProps) 
                 </>
               )}
 
-              {/* Collection đang chọn nhưng backend chưa biết: vẫn hiện để
-                  người dùng thấy mình đang ở đâu trước khi index. */}
+              {/* Bộ đang chọn nhưng backend chưa biết: vẫn hiện để người dùng
+                  thấy mình đang ở đâu trước khi index. */}
               {!isLoading && !isKnown && collection && (
                 <CollectionItem
                   name={collection}
                   isActive
-                  isPending
                   onSelect={() => onCollectionChange(collection)}
                 />
               )}
@@ -120,24 +115,15 @@ export function AppSidebar({ collection, onCollectionChange }: AppSidebarProps) 
                 />
               ))}
 
-              {!isLoading && items.length === 0 && !isError && (
-                <p className="px-2 py-1.5 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-                  Chưa có bộ tài liệu nào. Tải PDF lên để bắt đầu.
-                </p>
-              )}
-
               {isError && (
                 <div className="px-2 py-1.5 group-data-[collapsible=icon]:hidden">
-                  <p className="text-xs text-muted-foreground">
-                    Không đọc được danh sách.
-                  </p>
                   <Button
                     variant="link"
                     size="sm"
-                    className="h-auto p-0 text-xs"
+                    className="h-auto p-0 text-[15px]"
                     onClick={() => void refetch()}
                   >
-                    Thử lại
+                    Tải lại danh sách
                   </Button>
                 </div>
               )}
@@ -145,32 +131,6 @@ export function AppSidebar({ collection, onCollectionChange }: AppSidebarProps) 
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-
-      <SidebarFooter className="border-t">
-        <div className="flex items-center justify-between gap-2 px-2 py-1.5 group-data-[collapsible=icon]:justify-center">
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                health ? "bg-primary" : "bg-destructive",
-              )}
-              aria-hidden
-            />
-            <span className="truncate text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-              {health ? `Backend v${health.version}` : "Mất kết nối backend"}
-            </span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6 shrink-0 group-data-[collapsible=icon]:hidden"
-            onClick={() => void refetch()}
-            aria-label="Tải lại danh sách bộ tài liệu"
-          >
-            <RefreshCw className={cn("size-3", isFetching && "animate-spin")} aria-hidden />
-          </Button>
-        </div>
-      </SidebarFooter>
     </Sidebar>
   );
 }
@@ -178,12 +138,10 @@ export function AppSidebar({ collection, onCollectionChange }: AppSidebarProps) 
 function CollectionItem({
   name,
   isActive,
-  isPending,
   onSelect,
 }: {
   name: string;
   isActive: boolean;
-  isPending?: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -192,13 +150,10 @@ function CollectionItem({
         isActive={isActive}
         onClick={onSelect}
         tooltip={name}
-        className="font-mono text-[13px]"
+        className="font-mono text-[15px]"
       >
         <Layers aria-hidden />
         <span className="truncate">{name}</span>
-        {isPending && (
-          <span className="ml-auto text-[10px] text-muted-foreground">mới</span>
-        )}
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
