@@ -23,12 +23,17 @@ Môi trường tái cấu trúc: Windows, Python 3.13, **không GPU**, **không 
 | Client HTTP frontend | `pytest frontend/tests/` | 8/8 pass |
 | Luồng viết lại câu hỏi | Mock backend + VLM | 7/7 pass |
 | Frontend không kéo torch | Quét import | Sạch |
-| `docker compose config` | Cả bản CPU và GPU | Pass |
+| `docker compose config` | Cả 4 tổ hợp (base, gpu, ui-only, external-vlm) | Pass |
+| **`docker build` frontend** | Build thật | Pass — image `cosmo-frontend` |
+| **Frontend chạy thật** | `make up-ui`, `curl localhost:7860` | HTTP 200, container `healthy` |
+| **UI render đúng** | Kiểm nội dung HTML trả về (56KB) | Có cả 2 tab, các nút, banner trạng thái backend |
+| **Qdrant chạy thật** | `curl localhost:6333/healthz` | HTTP 200, container `healthy` |
 
-**Tổng: 50/50 test pass.**
+**Tổng: 50/50 test pass. Frontend và Qdrant đã chạy thật.**
 
 ```bash
-pytest              # chạy lại toàn bộ
+pytest              # chạy lại toàn bộ test
+make up-ui          # chạy lại frontend + qdrant
 ```
 
 ---
@@ -37,12 +42,13 @@ pytest              # chạy lại toàn bộ
 
 Những phần dưới đây **không thể** kiểm trong môi trường không GPU. Chạy theo đúng thứ tự.
 
-### 1. Build Docker image
+### 1. Build image backend và worker
 
-Docker daemon không chạy được lúc tái cấu trúc nên **chưa có image nào được build thật**.
+Frontend đã build và chạy được thật. **Backend và worker thì chưa** — chúng cần CUDA base image và bộ deps rất nặng.
 
 ```bash
-docker compose build
+docker compose build worker     # thử cái này trước, rủi ro cao nhất
+docker compose build backend
 ```
 
 Rủi ro cao nhất: `paddlepaddle-gpu==3.0.0` lấy từ index riêng của Paddle, hay gãy. Nếu lỗi, thử:

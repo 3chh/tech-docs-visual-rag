@@ -58,7 +58,22 @@ Map khớp bản `chatpdf_ver_2` cũ nên **`agent_tung` và client hiện có k
 
 ---
 
-## Bắt đầu nhanh
+## Chỉ xem giao diện (không cần GPU, không cần model)
+
+Muốn kiểm tra build hoặc phát triển frontend:
+
+```bash
+cd cosmo-chatpdf
+make up-ui
+```
+
+Lên trong khoảng một phút — chỉ frontend + Qdrant, không nạp model nào, không cần API key. Mở http://localhost:7860.
+
+UI sẽ hiện banner **"🔴 không kết nối được"** vì backend không chạy ở chế độ này. Hai tab và mọi thành phần vẫn render đầy đủ; bấm nút thì báo lỗi kết nối — đúng như mong đợi.
+
+---
+
+## Bắt đầu nhanh (chạy thật)
 
 Chỉ cần Docker + NVIDIA Container Toolkit. **Không cài gì trên máy** — vLLM, ColQwen, PaddleOCR đều chạy trong container và tự tải model.
 

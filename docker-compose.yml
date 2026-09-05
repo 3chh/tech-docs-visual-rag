@@ -88,7 +88,9 @@ services:
       TOC_VALIDATOR_TYPE: ${TOC_VALIDATOR_TYPE:-gemini}
       TOC_VALIDATOR_MODEL_NAME: ${TOC_VALIDATOR_MODEL_NAME:-gemini-2.0-flash}
       TOC_VALIDATOR_ENDPOINT: ${TOC_VALIDATOR_ENDPOINT:-https://generativelanguage.googleapis.com/v1beta/openai/}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY chưa đặt trong .env}
+      # Thiếu key thì worker fail-fast lúc khởi động (backend/core/config.py).
+      # Không dùng ${VAR:?} ở đây vì nó chặn cả `make up-ui` (worker không chạy).
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
 
       VLM_TYPE: openai
       VLM_ENDPOINT: http://vllm:8000/v1

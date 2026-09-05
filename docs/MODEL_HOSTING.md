@@ -1,15 +1,56 @@
 # Quy trình host model
 
-Hệ thống dùng **ba model**, hai trong số đó chạy trên GPU của bạn.
+## Bốn model, bốn việc khác nhau
 
-| Model | Việc | Ở đâu | VRAM |
-|---|---|---|---|
-| **VLM** (InternVL3 / Qwen2.5-VL) | Đọc ảnh-mục, sinh câu trả lời | vLLM trong stack | 8–40 GB |
-| **ColQwen 2.5-3B** | Embed ảnh-mục để truy xuất | backend, tự tải | ~10 GB |
-| **PaddleOCR + PP-DocLayout** | Layout detection, OCR | worker, tự tải | ~5 GB |
-| Gemini Flash | Sửa cây mục lục | API ngoài | 0 |
+Chúng không thay thế nhau — mỗi cái giải một bài toán riêng:
 
-ColQwen và PaddleOCR **tự tải khi khởi động lần đầu** — không cần làm gì. Tài liệu này chủ yếu nói về VLM.
+```
+        INDEX (một lần cho mỗi tài liệu)
+┌────────────────────────────────────────────────────────┐
+│  PDF scan                                              │
+│     │                                                  │
+│     ├─► ① PaddleOCR + PP-DocLayout    ĐỌC CẤU TRÚC    │
+│     │      "tiêu đề ở toạ độ này, công thức ở đây,    │
+│     │       số trang ở đây" → suy ra biên mục          │
+│     │                                                  │
+│     ├─► ③ Gemini Flash                SỬA MỤC LỤC     │
+│     │      "5.4.2 là con của 5.4; 'MỤC LỤC' không     │
+│     │       phải tiêu đề thật, bỏ đi"                  │
+│     │                                                  │
+│     └─► ② ColQwen                     ĐÁNH CHỈ MỤC    │
+│            ảnh-mục → vector, để sau này tìm được       │
+└────────────────────────────────────────────────────────┘
+
+        TRUY VẤN (mỗi lần người dùng hỏi)
+┌────────────────────────────────────────────────────────┐
+│  Câu hỏi                                               │
+│     ├─► ② ColQwen     TÌM: câu hỏi → vector → khớp    │
+│     │                 với ảnh-mục nào trong nghìn ảnh  │
+│     │                                                  │
+│     └─► ④ VLM         ĐỌC & TRẢ LỜI: nhìn 3-5 ảnh-mục │
+│                       tìm được → soạn câu trả lời      │
+└────────────────────────────────────────────────────────┘
+```
+
+| # | Model | Vai trò | Tại sao không thay bằng model khác | Ở đâu | VRAM |
+|---|---|---|---|---|---|
+| ① | **PaddleOCR + PP-DocLayout** | Nhận diện **vị trí** các thành phần trên trang | Chuyên biệt cho layout tài liệu. VLM tổng quát biết "trang này nói gì" nhưng không cho toạ độ pixel đủ chính xác để cắt ảnh | worker, tự tải | ~5 GB |
+| ② | **ColQwen 2.5-3B** | **Retriever** — biến ảnh và câu hỏi thành vector so sánh được | Đây là model **so khớp**, không sinh văn bản. Nó không trả lời được câu hỏi, chỉ nói "ảnh này giống câu hỏi này bao nhiêu" | backend, tự tải | ~10 GB |
+| ③ | **Gemini Flash** | Suy luận **phân cấp** mục lục từ danh sách tiêu đề | Chỉ xử lý text ngắn nên gọi API rẻ hơn nhiều so với host model riêng | API ngoài | 0 |
+| ④ | **VLM** (InternVL3 / Qwen2.5-VL) | **Đọc** ảnh tài liệu và soạn câu trả lời | Model duy nhất sinh được văn bản tự nhiên từ ảnh | vLLM trong stack | 8–40 GB |
+
+### Điểm dễ lẫn: ② và ④ đều "nhìn ảnh" nhưng khác hẳn nhau
+
+| | ② ColQwen | ④ VLM |
+|---|---|---|
+| Vào | 1 ảnh **hoặc** 1 câu hỏi | 3–5 ảnh **và** 1 câu hỏi |
+| Ra | Vector số (8203 × 128) | Văn bản tiếng người |
+| Ví như | Thước đo độ giống nhau | Người đọc rồi kể lại |
+| Chạy khi | Index mọi ảnh + mỗi truy vấn | Chỉ trên vài ảnh đã lọc |
+
+Không thể dùng VLM để tìm kiếm: mỗi truy vấn sẽ phải cho nó đọc hết cả nghìn ảnh. Cũng không thể dùng ColQwen để trả lời: nó chỉ ra số, không ra chữ.
+
+ColQwen (②) và PaddleOCR (①) **tự tải khi khởi động lần đầu** — không cần làm gì. Phần còn lại của tài liệu này nói về VLM (④), thứ duy nhất bạn phải chọn.
 
 ---
 

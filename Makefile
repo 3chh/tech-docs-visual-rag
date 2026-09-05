@@ -1,16 +1,18 @@
 COMPOSE      := docker compose
 COMPOSE_GPU  := docker compose -f docker-compose.yml -f docker-compose.gpu.yml
 COMPOSE_EXT  := docker compose -f docker-compose.yml -f docker-compose.external-vlm.yml -f docker-compose.gpu.yml
+COMPOSE_UI   := docker compose -f docker-compose.yml -f docker-compose.ui-only.yml
 
-.PHONY: help setup build up up-gpu up-external-vlm down restart logs logs-vllm logs-backend \
-        ps health pull-models test lint clean clean-all
+.PHONY: help setup setup-ui build build-ui up up-ui up-gpu up-external-vlm down restart \
+        logs logs-vllm logs-backend logs-frontend ps health pull-models test lint clean clean-all
 
 help:
 	@echo "Cosmo ChatPDF"
 	@echo ""
 	@echo "  Chạy"
-	@echo "    make up-gpu           Lên toàn bộ stack với GPU  <- dùng cái này"
-	@echo "    make up               Lên stack không GPM (chỉ xem giao diện)"
+	@echo "    make up-ui            Chỉ giao diện + Qdrant, KHÔNG cần GPU/model"
+	@echo "    make up-gpu           Lên toàn bộ stack với GPU  <- chạy thật"
+	@echo "    make up               Lên stack không cấp GPU (model sẽ rất chậm)"
 	@echo "    make up-external-vlm  Lên stack, dùng VLM host sẵn ở nơi khác"
 	@echo "    make down             Dừng"
 	@echo "    make restart          Khởi động lại"
@@ -41,12 +43,28 @@ setup:
 	@grep -q '^GEMINI_API_KEY=.\+' .env || \
 		(echo "GEMINI_API_KEY còn trống trong .env" && exit 1)
 
+# Chế độ chỉ-UI không gọi model nào nên không cần API key.
+setup-ui:
+	@test -f .env || cp .env.example .env
+
 build:
 	$(COMPOSE) build
+
+build-ui:
+	$(COMPOSE_UI) build frontend
 
 up: setup
 	$(COMPOSE) up -d
 	@$(MAKE) --no-print-directory _after-up
+
+up-ui: setup-ui
+	$(COMPOSE_UI) up -d --build
+	@echo ""
+	@echo "Chỉ giao diện + Qdrant. Backend không chạy nên UI sẽ hiện"
+	@echo "banner 'backend không kết nối được' — đúng như mong đợi."
+	@echo ""
+	@echo "  Giao diện: http://localhost:$${FRONTEND_PORT:-7860}"
+	@echo "  Qdrant:    http://localhost:$${QDRANT_HTTP_PORT:-6333}/dashboard"
 
 up-gpu: setup
 	$(COMPOSE_GPU) up -d
@@ -106,3 +124,6 @@ clean:
 clean-all:
 	$(COMPOSE) down -v
 	@echo "Đã xoá cả model đã tải — lần chạy sau phải tải lại."
+
+logs-frontend:
+	$(COMPOSE) logs -f frontend
