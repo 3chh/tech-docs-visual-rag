@@ -1,16 +1,18 @@
-import { RotateCcw } from "lucide-react";
+import { HelpCircle, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-/** Một dòng cấu hình: nhãn, giải thích, giá trị mặc định, và control. */
+/** Một dòng cấu hình: nhãn, giải thích, tooltip, giá trị mặc định, và control. */
 function Row({
   label,
   hint,
+  tooltip,
   defaultLabel,
   isOverridden,
   onReset,
@@ -18,6 +20,7 @@ function Row({
 }: {
   label: string;
   hint?: string;
+  tooltip?: string;
   defaultLabel?: string;
   isOverridden?: boolean;
   onReset?: () => void;
@@ -27,16 +30,28 @@ function Row({
     <div className="flex items-start justify-between gap-4 py-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <Label className="text-[15px] font-normal">{label}</Label>
+          <Label className="text-xs font-semibold text-foreground">{label}</Label>
+          {tooltip && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-help text-muted-foreground/70 hover:text-foreground transition-colors">
+                  <HelpCircle className="size-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">
+                {tooltip}
+              </TooltipContent>
+            </Tooltip>
+          )}
           {isOverridden && (
-            <span className="rounded-sm bg-primary/12 px-1.5 py-px text-xs text-primary">
+            <span className="rounded-sm bg-emerald-500/15 px-1.5 py-px text-[10px] text-emerald-600 font-medium">
               đã đổi
             </span>
           )}
         </div>
-        {hint && <p className="mt-0.5 text-sm text-muted-foreground">{hint}</p>}
+        {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
         {defaultLabel !== undefined && (
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
             Mặc định: <span className="font-mono tabular">{defaultLabel}</span>
           </p>
         )}
@@ -51,6 +66,7 @@ function Row({
             className="size-7"
             onClick={onReset}
             aria-label={`Trả ${label} về mặc định`}
+            title="Trả về giá trị mặc định"
           >
             <RotateCcw className="size-3.5" aria-hidden />
           </Button>
@@ -63,6 +79,7 @@ function Row({
 export function NumberSetting({
   label,
   hint,
+  tooltip,
   value,
   defaultValue,
   min,
@@ -73,6 +90,7 @@ export function NumberSetting({
 }: {
   label: string;
   hint?: string;
+  tooltip?: string;
   value: number | undefined;
   defaultValue: number;
   min: number;
@@ -87,6 +105,7 @@ export function NumberSetting({
     <Row
       label={label}
       hint={hint}
+      tooltip={tooltip}
       defaultLabel={unit ? `${defaultValue} ${unit}` : String(defaultValue)}
       isOverridden={isOverridden}
       onReset={() => onChange(undefined)}
@@ -107,9 +126,9 @@ export function NumberSetting({
               if (Number.isNaN(next)) return;
               onChange(Math.min(max, Math.max(min, next)));
             }}
-            className={cn("h-8 w-24 font-mono tabular", isOverridden && "border-primary/45")}
+            className={cn("h-8 w-24 font-mono tabular text-xs", isOverridden && "border-primary/45")}
           />
-          {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+          {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
         </div>
       }
     />
@@ -119,12 +138,14 @@ export function NumberSetting({
 export function BoolSetting({
   label,
   hint,
+  tooltip,
   value,
   defaultValue,
   onChange,
 }: {
   label: string;
   hint?: string;
+  tooltip?: string;
   value: boolean | undefined;
   defaultValue: boolean;
   onChange: (value: boolean | undefined) => void;
@@ -136,6 +157,7 @@ export function BoolSetting({
     <Row
       label={label}
       hint={hint}
+      tooltip={tooltip}
       defaultLabel={defaultValue ? "bật" : "tắt"}
       isOverridden={isOverridden}
       onReset={() => onChange(undefined)}
@@ -154,76 +176,95 @@ export function BoolSetting({
 export function TextSetting({
   label,
   hint,
+  tooltip,
   value,
   defaultValue,
+  multiline,
   onChange,
-  mono,
 }: {
   label: string;
   hint?: string;
+  tooltip?: string;
   value: string | undefined;
   defaultValue: string;
+  multiline?: boolean;
   onChange: (value: string | undefined) => void;
-  mono?: boolean;
 }) {
-  const isOverridden = Boolean(value) && value !== defaultValue;
+  const isOverridden = value !== undefined && value !== defaultValue;
 
   return (
     <Row
       label={label}
       hint={hint}
-      defaultLabel={defaultValue}
+      tooltip={tooltip}
+      defaultLabel={defaultValue ? `"${defaultValue.slice(0, 30)}..."` : "(trống)"}
       isOverridden={isOverridden}
       onReset={() => onChange(undefined)}
       control={
-        <Input
-          value={value ?? ""}
-          placeholder={defaultValue}
-          onChange={(e) => onChange(e.target.value || undefined)}
-          className={cn(
-            "h-8 w-52",
-            mono && "font-mono",
-            isOverridden && "border-primary/45",
-          )}
-        />
+        multiline ? (
+          <textarea
+            rows={3}
+            value={value ?? ""}
+            placeholder={defaultValue || "(dùng mặc định của hệ thống)"}
+            onChange={(e) => {
+              const next = e.target.value;
+              onChange(next === "" ? undefined : next);
+            }}
+            className={cn(
+              "w-64 rounded-md border bg-transparent px-2.5 py-1.5 text-xs font-mono transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              isOverridden && "border-primary/45",
+            )}
+          />
+        ) : (
+          <Input
+            value={value ?? ""}
+            placeholder={defaultValue}
+            onChange={(e) => {
+              const next = e.target.value;
+              onChange(next === "" ? undefined : next);
+            }}
+            className={cn("h-8 w-48 font-mono text-xs", isOverridden && "border-primary/45")}
+          />
+        )
       }
     />
   );
 }
 
-/** Tham số không đổi nóng được. Nêu lý do cụ thể, không nói chung chung. */
 export function LockedSetting({
   label,
   value,
-  reason,
-  envVar,
-  mono,
+  note,
+  tooltip,
 }: {
   label: string;
   value: string | number | boolean;
-  reason: string;
-  envVar?: string;
-  mono?: boolean;
+  note?: string;
+  tooltip?: string;
 }) {
-  const display = typeof value === "boolean" ? (value ? "bật" : "tắt") : String(value);
-
   return (
-    <div className="flex items-start justify-between gap-4 py-3">
+    <div className="flex items-start justify-between gap-4 py-2.5">
       <div className="min-w-0 flex-1">
-        <p className="text-[15px]">{label}</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">{reason}</p>
-        {envVar && (
-          <p className="mt-0.5 font-mono text-xs text-muted-foreground">{envVar}</p>
-        )}
+        <div className="flex items-center gap-1.5">
+          <Label className="text-xs font-medium text-foreground">{label}</Label>
+          {tooltip && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-help text-muted-foreground/70 hover:text-foreground">
+                  <HelpCircle className="size-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">
+                {tooltip}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+        {note && <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>}
       </div>
-      <span
-        className={cn(
-          "shrink-0 rounded-sm bg-muted px-2 py-1 text-sm",
-          mono ? "font-mono" : "tabular",
-        )}
-        title={display}
-      >
-        {display}
+      <span className="rounded bg-muted/60 px-2 py-1 font-mono text-xs text-muted-foreground">
+        {String(value)}
       </span>
     </div>
   );
@@ -231,22 +272,17 @@ export function LockedSetting({
 
 export function SettingGroup({
   title,
-  description,
   children,
 }: {
   title: string;
-  description?: string;
   children: ReactNode;
 }) {
   return (
-    <section>
-      <h3 className="border-b pb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="space-y-1">
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
-      </h3>
-      {description && (
-        <p className="pt-2 text-sm text-muted-foreground">{description}</p>
-      )}
-      <div className="divide-y">{children}</div>
-    </section>
+      </h4>
+      <div className="divide-y rounded-md border bg-card/60 px-3 py-1">{children}</div>
+    </div>
   );
 }

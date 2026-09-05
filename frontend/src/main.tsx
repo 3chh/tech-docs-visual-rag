@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 
 import App from "./App";
 import { TooltipProvider } from "./components/ui/tooltip";
+import { AuthProvider } from "./features/auth";
+import { I18nProvider } from "./lib/i18n";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -19,9 +21,13 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider delayDuration={300}>
-        <App />
-      </TooltipProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <TooltipProvider delayDuration={200}>
+            <App />
+          </TooltipProvider>
+        </AuthProvider>
+      </I18nProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

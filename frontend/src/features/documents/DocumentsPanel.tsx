@@ -18,6 +18,7 @@ import type { ProcessingOverrides } from "@/features/settings/types";
 import { pruneEmpty } from "@/features/settings/types";
 import type { TocBook, UploadFileMeta, UploadResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 import {
   createQueuedFiles,
@@ -47,6 +48,7 @@ export function DocumentsPanel({
   const [rejected, setRejected] = useState<string[]>([]);
   const [result, setResult] = useState<UploadResponse | null>(null);
 
+  const { t } = useI18n();
   const books = toc.data?.books ?? [];
   const totals = useMemo(
     () => ({
@@ -94,14 +96,18 @@ export function DocumentsPanel({
 
   return (
     <div className="mx-auto w-full max-w-[55rem] space-y-6 px-6 py-6">
-      <header>
-        <h1 className="text-lg font-semibold tracking-tight">
-          Tài liệu trong <span className="font-mono">{collection}</span>
-        </h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          Mỗi PDF thành một cuốn. Hệ thống nhận diện bố cục, tách theo mục lục rồi
-          đánh chỉ mục từng mục.
-        </p>
+      <header className="flex items-baseline justify-between border-b pb-3">
+        <div>
+          <h1 className="text-base font-semibold tracking-tight text-foreground">
+            {t("documents_title")}
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {t("in_collection")}: <span className="font-mono text-foreground font-medium">{collection}</span>
+          </p>
+        </div>
+        <span className="text-xs font-mono text-muted-foreground">
+          {totals.books} cuốn · {totals.pages} trang
+        </span>
       </header>
 
       {toc.isLoading ? (
@@ -204,7 +210,7 @@ export function DocumentsPanel({
       {result && <ResultSummary result={result} />}
 
       <section className="space-y-2.5">
-        <SectionHeading>Đã có trong bộ</SectionHeading>
+        <SectionHeading>{t("in_collection")}</SectionHeading>
 
         {toc.isLoading ? (
           <div className="space-y-2">
@@ -231,7 +237,7 @@ export function DocumentsPanel({
                       {book.title ?? `Cuốn ${book.book_index}`}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground tabular">
-                      {book.total_sections} mục · {book.total_pages} trang
+                      {book.total_sections} {t("total_sections")} · {book.total_pages} {t("total_pages")}
                     </p>
                   </div>
                 </div>
@@ -243,8 +249,8 @@ export function DocumentsPanel({
                     className="h-8 gap-1.5 text-xs font-medium shrink-0"
                     onClick={() => onOpenBookInCanvas(book)}
                   >
-                    <BookOpen className="size-3.5 text-primary" />
-                    <span>Xem trong Canvas</span>
+                    <BookOpen className="size-3.5 text-emerald-600" />
+                    <span>{t("open_in_canvas")}</span>
                   </Button>
                 )}
               </li>

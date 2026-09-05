@@ -1,10 +1,11 @@
-import { FileStack, ListTree, MessageSquare, Settings2 } from "lucide-react";
+import { Globe } from "lucide-react";
 import { useState } from "react";
 
-import { AppSidebar } from "@/components/layout/AppSidebar";
+import { AppSidebar, type AreaId } from "@/components/layout/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AskPanel } from "@/features/ask";
 import { useChatSessions } from "@/features/ask/use-sessions";
 import { DocumentsPanel } from "@/features/documents/DocumentsPanel";
@@ -16,29 +17,17 @@ import {
   type StoredSettings,
 } from "@/features/settings/types";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import type { SearchResult, TocBook } from "@/lib/types";
-import { cn } from "@/lib/utils";
-
-/**
- * Các khu vực làm việc chính theo luồng sử dụng hiện đại:
- * 1. Chat & Canvas (Mặc định): Màn hình chia đôi - bên trái hỏi đáp với AI,
- *    bên phải là Canvas xem ảnh trang gốc, công thức và mục lục tài liệu.
- * 2. Tài liệu: Quản lý các cuốn sách PDF trong bộ, tải lên và chỉ mục.
- * 3. Mục lục tổng quan: Cây thư mục toàn bộ các sách trong bộ.
- */
-const AREAS = [
-  { id: "ask", label: "Chat & Canvas", icon: MessageSquare },
-  { id: "documents", label: "Tài liệu", icon: FileStack },
-  { id: "outline", label: "Mục lục", icon: ListTree },
-] as const;
-
-type AreaId = (typeof AREAS)[number]["id"];
 
 export default function App() {
   const [collection, setCollection] = useState("default");
   const [area, setArea] = useState<AreaId>("ask");
   const [settings, setSettings] = useState<StoredSettings>(loadSettings);
   const [activeSource, setActiveSource] = useState<SearchResult | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const { t, language, toggleLanguage } = useI18n();
 
   // Quản lý phiên hội thoại cho bộ tài liệu hiện tại
   const {
@@ -79,21 +68,18 @@ export default function App() {
     }
   }
 
-  const sidebarSettingsTrigger = (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="w-full justify-start gap-2 h-8 text-xs text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0 font-medium"
-      title="Cấu hình hệ thống"
-    >
-      <Settings2 className="size-4 shrink-0 text-muted-foreground" />
-      <span className="group-data-[collapsible=icon]:hidden">Cấu hình hệ thống</span>
-    </Button>
-  );
+  const areaTitle =
+    area === "ask"
+      ? t("nav_chat")
+      : area === "documents"
+      ? t("nav_documents")
+      : t("nav_outline");
 
   return (
     <SidebarProvider>
       <AppSidebar
+        currentArea={area}
+        onAreaChange={setArea}
         collection={collection}
         onCollectionChange={setCollection}
         sessions={sessions}
@@ -107,49 +93,52 @@ export default function App() {
           setArea("ask");
         }}
         onDeleteSession={deleteSession}
-        settingsTrigger={
-          <SettingsDialog
-            settings={settings}
-            onChange={updateSettings}
-            trigger={sidebarSettingsTrigger}
-          />
-        }
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
-      <SidebarInset className="flex h-svh min-w-0 flex-col overflow-hidden">
-        {/* Top App Header */}
-        <header className="flex h-13 shrink-0 items-center gap-2 border-b bg-background px-3">
-          <SidebarTrigger className="size-7" />
-          <Separator orientation="vertical" className="mr-1 !h-5" />
+      <SidebarInset className="flex h-svh min-w-0 flex-col overflow-hidden bg-background">
+        {/* Top Minimalist Header Bar */}
+        <header className="flex h-11 shrink-0 items-center justify-between border-b bg-card/60 px-3 select-none">
+          <div className="flex items-center gap-2 min-w-0">
+            <SidebarTrigger className="size-7 text-muted-foreground hover:text-foreground" />
+            <Separator orientation="vertical" className="!h-4" />
+            <h2 className="text-xs font-semibold text-foreground truncate">
+              {areaTitle}
+            </h2>
+            <span className="text-[11px] text-muted-foreground/80 font-mono">
+              / {collection}
+            </span>
+          </div>
 
-          <nav aria-label="Khu vực làm việc" className="flex items-center gap-1">
-            {AREAS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setArea(id)}
-                aria-current={area === id ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
-                  area === id
-                    ? "bg-secondary font-semibold text-secondary-foreground shadow-2xs"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <Icon className="size-3.5" aria-hidden />
-                {label}
-              </button>
-            ))}
-          </nav>
+          <div className="flex items-center gap-1">
+            {/* Quick Language Switcher */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleLanguage}
+                  className="h-7 px-2 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <Globe className="size-3.5" />
+                  <span className="font-mono text-[10px] font-bold uppercase">
+                    {language}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t("language_switch")}: {language === "vi" ? "Tiếng Việt" : "English"}
+              </TooltipContent>
+            </Tooltip>
 
-          <div className="ml-auto flex items-center gap-2">
-            <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-2 py-1 text-xs">
-              <span className="text-[11px] text-muted-foreground">Bộ hiện tại:</span>
-              <span className="font-mono font-semibold text-foreground">{collection}</span>
-            </div>
-
-            <SettingsDialog settings={settings} onChange={updateSettings} />
+            {/* System & Collection Settings Dialog */}
+            <SettingsDialog
+              open={isSettingsOpen}
+              onOpenChange={setIsSettingsOpen}
+              settings={settings}
+              onChange={updateSettings}
+              activeCollection={collection}
+            />
           </div>
         </header>
 

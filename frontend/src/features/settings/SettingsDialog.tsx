@@ -1,5 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Lock, RotateCcw, Scissors, Search, Settings2, SlidersHorizontal, TriangleAlert } from "lucide-react";
+import {
+  FileText,
+  Globe,
+  Lock,
+  RotateCcw,
+  Scissors,
+  Search,
+  Settings2,
+  SlidersHorizontal,
+  TriangleAlert,
+} from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,38 +25,37 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import type { SettingsResponse } from "@/lib/types";
+import { useI18n } from "@/lib/i18n";
 
 import {
   BoolSetting,
   LockedSetting,
   NumberSetting,
   SettingGroup,
-  TextSetting,
 } from "./SettingRow";
 import {
   DEFAULT_SETTINGS,
   LIMITS,
+  type AskOverrides,
   type StoredSettings,
 } from "./types";
 
-/**
- * Cấu hình chia theo danh mục với giao diện Sidebar dọc:
- * 1. Tra cứu (Retrieval & VLM) -> gửi kèm mỗi câu hỏi
- * 2. Xử lý PDF (DPI, Padding, OCR) -> gửi kèm mỗi lần upload
- * 3. Cắt mục (Chunking & ToC) -> cấu hình trích xuất ToC
- * 4. Cố định -> các tham số VRAM/Model/Database cố định
- */
 export interface SettingsDialogProps {
   settings: StoredSettings;
   onChange: (settings: StoredSettings) => void;
   trigger?: React.ReactNode;
+  activeCollection?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function SettingsDialog({
   settings,
   onChange,
   trigger,
+  activeCollection = "default",
+  open,
+  onOpenChange,
 }: SettingsDialogProps) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["settings"],
@@ -54,19 +64,33 @@ export function SettingsDialog({
     retry: false,
   });
 
+  const { t, language, setLanguage } = useI18n();
+  const [scope, setScope] = useState<"collection" | "system">("collection");
+  const [activeTab, setActiveTab] = useState<string>("ask");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
   const overrideCount =
-    countOverrides(settings.ask, DEFAULT_SETTINGS.ask) +
-    countNested(settings.processing);
+    countAskOverrides(settings.ask, DEFAULT_SETTINGS.ask) +
+    countNested(settings.processing as Record<string, unknown>);
+
+  function resetAll() {
+    onChange(DEFAULT_SETTINGS);
+  }
+
+  function handleSave() {
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 2000);
+  }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         {trigger ?? (
-          <Button variant="ghost" size="sm" className="gap-1.5">
+          <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
             <Settings2 className="size-4" aria-hidden />
-            Cấu hình
+            <span>{t("settings_title")}</span>
             {overrideCount > 0 && (
-              <span className="rounded-sm bg-primary/12 px-1.5 py-px font-mono text-xs text-primary tabular">
+              <span className="rounded-sm bg-emerald-500/15 px-1.5 py-px font-mono text-[10px] text-emerald-600 font-bold tabular">
                 {overrideCount}
               </span>
             )}
@@ -75,596 +99,365 @@ export function SettingsDialog({
       </DialogTrigger>
 
       <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
-        <DialogHeader className="shrink-0 border-b px-6 py-4">
-          <DialogTitle className="flex items-center gap-2">
-            <SlidersHorizontal className="size-5 text-primary" />
-            Cấu hình Hệ thống
-          </DialogTitle>
-          <DialogDescription>
-            Tham số áp dụng cho phiên làm việc của bạn. Lưu cục bộ trên trình duyệt, không ảnh hưởng người dùng khác.
+        {/* Dialog Header */}
+        <DialogHeader className="shrink-0 border-b px-6 py-3.5 bg-muted/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="size-4.5 text-emerald-600" />
+              <DialogTitle className="text-sm font-semibold">
+                {t("settings_title")}
+              </DialogTitle>
+            </div>
+
+            {/* Scope Switcher: Cấu hình Bộ tài liệu vs Cấu hình Hệ thống */}
+            <div className="flex items-center rounded-lg border bg-muted/40 p-0.5 text-xs mr-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setScope("collection");
+                  setActiveTab("ask");
+                }}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+                  scope === "collection"
+                    ? "bg-background text-emerald-700 dark:text-emerald-300 shadow-2xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t("collection_settings_tab")} ({activeCollection})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setScope("system");
+                  setActiveTab("fixed");
+                }}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+                  scope === "system"
+                    ? "bg-background text-emerald-700 dark:text-emerald-300 shadow-2xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t("system_settings_tab")}
+              </button>
+            </div>
+          </div>
+          <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+            {scope === "collection"
+              ? `Các tham số áp dụng riêng cho lượt tra cứu và xử lý tệp trong bộ [${activeCollection}].`
+              : "Các tham số hạ tầng máy chủ, mô hình AI đọc ảnh và tuỳ chọn hiển thị chung."}
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="ask" orientation="vertical" className="flex min-h-0 flex-1 flex-row gap-0 overflow-hidden">
-          <TabsList className="flex w-52 shrink-0 flex-col items-stretch justify-start gap-1 rounded-none border-r bg-muted/25 p-3">
-            <TabsTrigger
-              value="ask"
-              className="flex w-full items-center justify-start gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              <Search className="size-4 text-muted-foreground" />
-              Tra cứu & VLM
-            </TabsTrigger>
-            <TabsTrigger
-              value="pdf"
-              className="flex w-full items-center justify-start gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              <FileText className="size-4 text-muted-foreground" />
-              Xử lý PDF
-            </TabsTrigger>
-            <TabsTrigger
-              value="chunk"
-              className="flex w-full items-center justify-start gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              <Scissors className="size-4 text-muted-foreground" />
-              Cắt mục ToC
-            </TabsTrigger>
-            <TabsTrigger
-              value="locked"
-              className="flex w-full items-center justify-start gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              <Lock className="size-4 text-muted-foreground" />
-              Tham số cố định
-            </TabsTrigger>
-          </TabsList>
+        {/* Dialog Body with Vertical Sidebar Tabs */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            orientation="vertical"
+            className="flex flex-1 min-h-0"
+          >
+            {/* Left Vertical Tabs List */}
+            <TabsList className="w-52 shrink-0 flex-col items-stretch justify-start rounded-none border-r bg-muted/15 p-2 space-y-1 h-auto min-h-0">
+              {scope === "collection" ? (
+                <>
+                  <TabsTrigger
+                    value="ask"
+                    className="justify-start gap-2.5 py-2 px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-300 data-[state=active]:font-semibold data-[state=active]:shadow-2xs"
+                  >
+                    <Search className="size-3.5 text-emerald-600" />
+                    <span>{t("runtime_tab")}</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="processing"
+                    className="justify-start gap-2.5 py-2 px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-300 data-[state=active]:font-semibold data-[state=active]:shadow-2xs"
+                  >
+                    <FileText className="size-3.5 text-emerald-600" />
+                    <span>{t("processing_tab")}</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="chunking"
+                    className="justify-start gap-2.5 py-2 px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-300 data-[state=active]:font-semibold data-[state=active]:shadow-2xs"
+                  >
+                    <Scissors className="size-3.5 text-emerald-600" />
+                    <span>Cắt lát & Biên lề</span>
+                  </TabsTrigger>
+                </>
+              ) : (
+                <>
+                  <TabsTrigger
+                    value="fixed"
+                    className="justify-start gap-2.5 py-2 px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-300 data-[state=active]:font-semibold data-[state=active]:shadow-2xs"
+                  >
+                    <Lock className="size-3.5 text-emerald-600" />
+                    <span>{t("fixed_tab")}</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="appearance"
+                    className="justify-start gap-2.5 py-2 px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-300 data-[state=active]:font-semibold data-[state=active]:shadow-2xs"
+                  >
+                    <Globe className="size-3.5 text-emerald-600" />
+                    <span>{t("general_tab")} & {t("language_name")}</span>
+                  </TabsTrigger>
+                </>
+              )}
+            </TabsList>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-            {isLoading && <LoadingRows />}
-            {isError && <BackendOffline />}
+            {/* Right Tab Contents */}
+            <div className="flex-1 min-w-0 overflow-y-auto p-6">
+              {isLoading && (
+                <div className="space-y-4">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-3/4" />
+                  <Skeleton className="h-10 w-4/5" />
+                </div>
+              )}
 
-            {data && (
-              <>
-                <TabsContent value="ask" className="mt-0 space-y-6 focus-visible:outline-none">
-                  <AskTab data={data} settings={settings} onChange={onChange} />
-                </TabsContent>
+              {isError && (
+                <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-xs text-destructive flex items-center gap-2">
+                  <TriangleAlert className="size-4" />
+                  <span>Không kết nối được backend để tải thông tin tham số mặc định.</span>
+                </div>
+              )}
 
-                <TabsContent value="pdf" className="mt-0 space-y-6 focus-visible:outline-none">
-                  <PdfTab data={data} settings={settings} onChange={onChange} />
-                </TabsContent>
+              {/* 1. Tra cứu & VLM */}
+              <TabsContent value="ask" className="m-0 space-y-4">
+                <SettingGroup title="Tham số Tìm kiếm & Đọc ảnh VLM">
+                  <NumberSetting
+                    label={t("top_k_title")}
+                    hint={t("top_k_plain_desc")}
+                    tooltip={t("top_k_tooltip")}
+                    value={settings.ask.topK}
+                    defaultValue={data?.runtime.top_k_default ?? DEFAULT_SETTINGS.ask.topK}
+                    min={data?.runtime.top_k_min ?? LIMITS.top_k.min}
+                    max={data?.runtime.top_k_max ?? LIMITS.top_k.max}
+                    onChange={(topK) =>
+                      onChange({
+                        ...settings,
+                        ask: { ...settings.ask, topK: topK ?? DEFAULT_SETTINGS.ask.topK },
+                      })
+                    }
+                  />
 
-                <TabsContent value="chunk" className="mt-0 space-y-6 focus-visible:outline-none">
-                  <ChunkTab data={data} settings={settings} onChange={onChange} />
-                </TabsContent>
+                  <BoolSetting
+                    label={t("toc_rewrite_title")}
+                    hint={t("toc_rewrite_plain_desc")}
+                    tooltip={t("toc_rewrite_tooltip")}
+                    value={settings.ask.useTocRewrite}
+                    defaultValue={data?.runtime.use_toc_rewrite_default ?? DEFAULT_SETTINGS.ask.useTocRewrite}
+                    onChange={(useTocRewrite) =>
+                      onChange({
+                        ...settings,
+                        ask: { ...settings.ask, useTocRewrite: useTocRewrite ?? true },
+                      })
+                    }
+                  />
 
-                <TabsContent value="locked" className="mt-0 space-y-6 focus-visible:outline-none">
-                  <LockedTab data={data} />
-                </TabsContent>
-              </>
+                  <NumberSetting
+                    label={t("vlm_temp_title")}
+                    hint={t("vlm_temp_plain_desc")}
+                    tooltip={t("vlm_temp_tooltip")}
+                    value={settings.ask.vlmTemperature}
+                    defaultValue={DEFAULT_SETTINGS.ask.vlmTemperature ?? 0}
+                    min={LIMITS.temperature.min}
+                    max={LIMITS.temperature.max}
+                    step={0.1}
+                    onChange={(vlmTemperature) =>
+                      onChange({ ...settings, ask: { ...settings.ask, vlmTemperature } })
+                    }
+                  />
+                </SettingGroup>
+              </TabsContent>
+
+              {/* 2. Xử lý PDF */}
+              <TabsContent value="processing" className="m-0 space-y-4">
+                <SettingGroup title="Chuyển đổi & Nhận diện tệp PDF">
+                  <NumberSetting
+                    label={t("dpi_title")}
+                    hint={t("dpi_plain_desc")}
+                    tooltip={t("dpi_tooltip")}
+                    value={settings.processing.preprocess?.pdf_to_image?.dpi}
+                    defaultValue={data?.document.preprocess.pdf_to_image.dpi ?? 300}
+                    min={LIMITS.dpi.min}
+                    max={LIMITS.dpi.max}
+                    step={25}
+                    unit="DPI"
+                    onChange={(dpi) =>
+                      onChange({
+                        ...settings,
+                        processing: {
+                          ...settings.processing,
+                          preprocess: {
+                            ...settings.processing.preprocess,
+                            pdf_to_image: {
+                              ...settings.processing.preprocess?.pdf_to_image,
+                              dpi,
+                            },
+                          },
+                        },
+                      })
+                    }
+                  />
+
+                  <BoolSetting
+                    label={t("split_title")}
+                    hint={t("split_plain_desc")}
+                    tooltip={t("split_tooltip")}
+                    value={settings.processing.preprocess?.pdf_to_image?.vertical_split}
+                    defaultValue={data?.document.preprocess.pdf_to_image.vertical_split ?? true}
+                    onChange={(vertical_split) =>
+                      onChange({
+                        ...settings,
+                        processing: {
+                          ...settings.processing,
+                          preprocess: {
+                            ...settings.processing.preprocess,
+                            pdf_to_image: {
+                              ...settings.processing.preprocess?.pdf_to_image,
+                              vertical_split,
+                            },
+                          },
+                        },
+                      })
+                    }
+                  />
+                </SettingGroup>
+              </TabsContent>
+
+              {/* 3. Cắt mục ToC */}
+              <TabsContent value="chunking" className="m-0 space-y-4">
+                <SettingGroup title="Cắt lát theo phân cấp Mục lục">
+                  <NumberSetting
+                    label={t("padding_title")}
+                    hint={t("padding_plain_desc")}
+                    tooltip={t("padding_tooltip")}
+                    value={settings.processing.chunking?.cut_padding}
+                    defaultValue={data?.document.chunking.cut_padding ?? 60}
+                    min={LIMITS.chunk_cut_padding.min}
+                    max={LIMITS.chunk_cut_padding.max}
+                    unit="px"
+                    onChange={(cut_padding) =>
+                      onChange({
+                        ...settings,
+                        processing: {
+                          ...settings.processing,
+                          chunking: {
+                            ...settings.processing.chunking,
+                            cut_padding,
+                          },
+                        },
+                      })
+                    }
+                  />
+                </SettingGroup>
+              </TabsContent>
+
+              {/* 4. Cố định & Hạ tầng */}
+              <TabsContent value="fixed" className="m-0 space-y-4">
+                <SettingGroup title="Mô hình AI & Dịch vụ">
+                  <LockedSetting
+                    label="Mô hình Đọc ảnh (VLM)"
+                    value={data?.models.vlm.model_name ?? "Qwen2-VL-7B-Instruct"}
+                    note="Phục vụ tại cổng GPU /v1"
+                    tooltip="Mô hình đọc và suy luận trực tiếp trên ảnh chụp trang tài liệu kỹ thuật."
+                  />
+                  <LockedSetting
+                    label="Mô hình Trích xuất Bố cục (Layout)"
+                    value={data?.document.layout.model_name ?? "PP-DocLayout_plus-L"}
+                    note="Phân đoạn tiêu đề, đoạn văn, bảng và công thức toán"
+                  />
+                  <LockedSetting
+                    label="Cơ sở dữ liệu Vector (Milvus)"
+                    value={data?.indexing.vectordb.uri ?? "localhost:19530"}
+                    note="Lưu trữ embedding các trang tài liệu"
+                  />
+                </SettingGroup>
+              </TabsContent>
+
+              {/* 5. Giao diện & Ngôn ngữ */}
+              <TabsContent value="appearance" className="m-0 space-y-4">
+                <SettingGroup title="Ngôn ngữ & Hiển thị">
+                  <div className="flex items-center justify-between py-3">
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">{t("language_switch")}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Chọn ngôn ngữ hiển thị toàn bộ giao diện.</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={language === "vi" ? "default" : "outline"}
+                        size="sm"
+                        className="h-8 text-xs font-medium"
+                        onClick={() => setLanguage("vi")}
+                      >
+                        Tiếng Việt
+                      </Button>
+                      <Button
+                        variant={language === "en" ? "default" : "outline"}
+                        size="sm"
+                        className="h-8 text-xs font-medium"
+                        onClick={() => setLanguage("en")}
+                      >
+                        English
+                      </Button>
+                    </div>
+                  </div>
+                </SettingGroup>
+              </TabsContent>
+            </div>
+          </Tabs>
+        </div>
+
+        {/* Dialog Footer */}
+        <DialogFooter className="shrink-0 border-t bg-card px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs">
+            {overrideCount > 0 ? (
+              <span className="text-emerald-600 font-medium">
+                Đang áp dụng {overrideCount} tham số tuỳ chỉnh.
+              </span>
+            ) : (
+              <span className="text-muted-foreground">Đang dùng toàn bộ giá trị chuẩn của hệ thống.</span>
+            )}
+            {saveSuccess && (
+              <span className="text-emerald-600 font-bold animate-fade-in">✓ Đã lưu cài đặt!</span>
             )}
           </div>
-        </Tabs>
 
-        <DialogFooter className="shrink-0 justify-between border-t px-5 py-3 sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            {overrideCount > 0
-              ? `${overrideCount} tham số đã đổi khỏi mặc định`
-              : "Đang dùng toàn bộ giá trị mặc định"}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={overrideCount === 0}
-            onClick={() => onChange(DEFAULT_SETTINGS)}
-          >
-            <RotateCcw className="size-3.5" aria-hidden />
-            Trả về mặc định
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resetAll}
+              disabled={overrideCount === 0}
+              className="gap-1.5 text-xs"
+            >
+              <RotateCcw className="size-3.5" />
+              <span>{t("reset_settings")}</span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium"
+            >
+              <span>{t("save_settings")}</span>
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-/* ---------- Tab 1: gửi kèm mỗi câu hỏi ---------- */
-
-function AskTab({
-  data,
-  settings,
-  onChange,
-}: {
-  data: SettingsResponse;
-  settings: StoredSettings;
-  onChange: (s: StoredSettings) => void;
-}) {
-  const ask = settings.ask;
-  const set = (patch: Partial<typeof ask>) =>
-    onChange({ ...settings, ask: { ...ask, ...patch } });
-
-  return (
-    <>
-      <SettingGroup
-        title="Truy xuất"
-        description="Áp dụng ngay cho câu hỏi tiếp theo, không cần khởi động lại."
-      >
-        <NumberSetting
-          label="Số mục lấy về"
-          hint="Càng nhiều càng chậm vì VLM phải đọc nhiều ảnh hơn"
-          value={ask.topK}
-          defaultValue={data.runtime.top_k_default}
-          min={LIMITS.top_k.min}
-          max={LIMITS.top_k.max}
-          onChange={(v) => set({ topK: v ?? data.runtime.top_k_default })}
-        />
-
-        <BoolSetting
-          label="Chuẩn hoá thuật ngữ theo mục lục"
-          hint="Cho VLM đọc ảnh bìa và mục lục rồi viết lại câu hỏi bằng thuật ngữ có thật trong tài liệu. Tắt đi nhanh hơn một lượt gọi model"
-          value={ask.useTocRewrite}
-          defaultValue={data.runtime.use_toc_rewrite_default}
-          onChange={(v) =>
-            set({ useTocRewrite: v ?? data.runtime.use_toc_rewrite_default })
-          }
-        />
-
-        <NumberSetting
-          label="Số ảnh mục lục dùng để chuẩn hoá"
-          hint="Nhiều hơn thì chuẩn hoá sát hơn nhưng tốn thêm visual token"
-          value={ask.tocPreviewLimit}
-          defaultValue={data.runtime.toc_preview_limit}
-          min={LIMITS.toc_preview_limit.min}
-          max={LIMITS.toc_preview_limit.max}
-          onChange={(v) => set({ tocPreviewLimit: v })}
-        />
-
-        <NumberSetting
-          label="Temperature của VLM"
-          hint="0 cho câu trả lời ổn định nhất. Tài liệu kỹ thuật nên để thấp"
-          value={ask.vlmTemperature}
-          defaultValue={0}
-          min={LIMITS.temperature.min}
-          max={LIMITS.temperature.max}
-          step={LIMITS.temperature.step}
-          onChange={(v) => set({ vlmTemperature: v })}
-        />
-      </SettingGroup>
-    </>
-  );
-}
-
-/* ---------- Tab 2: gửi kèm mỗi lần upload ---------- */
-
-function PdfTab({
-  data,
-  settings,
-  onChange,
-}: {
-  data: SettingsResponse;
-  settings: StoredSettings;
-  onChange: (s: StoredSettings) => void;
-}) {
-  const p = settings.processing;
-  const img = data.document.preprocess.pdf_to_image;
-  const pre = data.document.preprocess;
-
-  const setImg = (patch: Record<string, unknown>) =>
-    onChange({
-      ...settings,
-      processing: {
-        ...p,
-        preprocess: {
-          ...p.preprocess,
-          pdf_to_image: { ...p.preprocess?.pdf_to_image, ...patch },
-        },
-      },
-    });
-
-  const setPre = (patch: Record<string, unknown>) =>
-    onChange({
-      ...settings,
-      processing: { ...p, preprocess: { ...p.preprocess, ...patch } },
-    });
-
-  const setLayout = (patch: Record<string, unknown>) =>
-    onChange({ ...settings, processing: { ...p, layout: { ...p.layout, ...patch } } });
-
-  const setOcr = (patch: Record<string, unknown>) =>
-    onChange({ ...settings, processing: { ...p, ocr: { ...p.ocr, ...patch } } });
-
-  return (
-    <>
-      <SettingGroup
-        title="PDF sang ảnh"
-        description="Áp dụng cho lần tải tài liệu tiếp theo. Tài liệu đã index không bị ảnh hưởng."
-      >
-        <NumberSetting
-          label="DPI mục tiêu"
-          hint="DPI thực tế tính động theo khổ trang: anchor / (rộng × cao) × dpi"
-          value={p.preprocess?.pdf_to_image?.dpi}
-          defaultValue={img.dpi}
-          min={LIMITS.dpi.min}
-          max={LIMITS.dpi.max}
-          onChange={(v) => setImg({ dpi: v })}
-        />
-        <NumberSetting
-          label="DPI tối thiểu"
-          hint="Sàn để trang khổ lớn không bị render quá nhỏ"
-          value={p.preprocess?.pdf_to_image?.min_dpi}
-          defaultValue={img.min_dpi}
-          min={LIMITS.min_dpi.min}
-          max={LIMITS.min_dpi.max}
-          onChange={(v) => setImg({ min_dpi: v })}
-        />
-        <NumberSetting
-          label="Số pixel chuẩn hoá"
-          hint="Mốc để mọi khổ sách ra ảnh có cùng lượng pixel, nhờ đó ngân sách visual token ổn định"
-          value={p.preprocess?.pdf_to_image?.anchor_size}
-          defaultValue={img.anchor_size}
-          min={LIMITS.anchor_size.min}
-          max={LIMITS.anchor_size.max}
-          step={10_000}
-          onChange={(v) => setImg({ anchor_size: v })}
-        />
-        <NumberSetting
-          label="Số luồng render"
-          value={p.preprocess?.pdf_to_image?.thread_count}
-          defaultValue={img.thread_count}
-          min={LIMITS.thread_count.min}
-          max={LIMITS.thread_count.max}
-          onChange={(v) => setImg({ thread_count: v })}
-        />
-      </SettingGroup>
-
-      <SettingGroup title="Cắt lề">
-        <BoolSetting
-          label="Bật cắt lề"
-          hint="Bỏ lề trắng là bỏ visual token vô nghĩa"
-          value={p.preprocess?.use_cut_padding}
-          defaultValue={pre.use_cut_padding}
-          onChange={(v) => setPre({ use_cut_padding: v })}
-        />
-        <NumberSetting
-          label="Lề chừa lại"
-          hint="Chừa quanh vùng chữ sau khi dò text"
-          value={p.preprocess?.padding}
-          defaultValue={pre.padding}
-          min={LIMITS.padding.min}
-          max={LIMITS.padding.max}
-          unit="px"
-          onChange={(v) => setPre({ padding: v })}
-        />
-        <NumberSetting
-          label="Batch dò chữ"
-          value={p.preprocess?.batch_size}
-          defaultValue={pre.batch_size}
-          min={LIMITS.preprocess_batch_size.min}
-          max={LIMITS.preprocess_batch_size.max}
-          onChange={(v) => setPre({ batch_size: v })}
-        />
-      </SettingGroup>
-
-      <SettingGroup title="Nhận diện bố cục và OCR">
-        <NumberSetting
-          label="Batch nhận diện bố cục"
-          hint="Lớn hơn thì nhanh hơn nhưng tốn VRAM hơn"
-          value={p.layout?.batch_size}
-          defaultValue={data.document.layout.batch_size}
-          min={LIMITS.layout_batch_size.min}
-          max={LIMITS.layout_batch_size.max}
-          onChange={(v) => setLayout({ batch_size: v })}
-        />
-        <NumberSetting
-          label="Batch OCR tiêu đề"
-          value={p.ocr?.title_batch_size}
-          defaultValue={data.document.ocr.title_batch_size}
-          min={LIMITS.ocr_batch_size.min}
-          max={LIMITS.ocr_batch_size.max}
-          onChange={(v) => setOcr({ title_batch_size: v })}
-        />
-        <NumberSetting
-          label="Batch OCR số trang"
-          value={p.ocr?.number_batch_size}
-          defaultValue={data.document.ocr.number_batch_size}
-          min={LIMITS.ocr_batch_size.min}
-          max={LIMITS.ocr_batch_size.max}
-          onChange={(v) => setOcr({ number_batch_size: v })}
-        />
-        <NumberSetting
-          label="Batch OCR công thức"
-          value={p.ocr?.formula_batch_size}
-          defaultValue={data.document.ocr.formula_batch_size}
-          min={LIMITS.ocr_batch_size.min}
-          max={LIMITS.ocr_batch_size.max}
-          onChange={(v) => setOcr({ formula_batch_size: v })}
-        />
-      </SettingGroup>
-    </>
-  );
-}
-
-/* ---------- Tab 3: cắt mục ---------- */
-
-function ChunkTab({
-  data,
-  settings,
-  onChange,
-}: {
-  data: SettingsResponse;
-  settings: StoredSettings;
-  onChange: (s: StoredSettings) => void;
-}) {
-  const p = settings.processing;
-  const chunk = data.document.chunking;
-  const toc = data.document.toc_validator;
-
-  const setChunk = (patch: Record<string, unknown>) =>
-    onChange({ ...settings, processing: { ...p, chunking: { ...p.chunking, ...patch } } });
-
-  const setToc = (patch: Record<string, unknown>) =>
-    onChange({
-      ...settings,
-      processing: { ...p, toc_validator: { ...p.toc_validator, ...patch } },
-    });
-
-  return (
-    <>
-      <SettingGroup
-        title="Cắt tài liệu thành mục"
-        description="Quyết định một mục gồm những gì. Đây là tham số ảnh hưởng chất lượng truy xuất nhiều nhất."
-      >
-        <NumberSetting
-          label="Lề cắt số trang"
-          hint="Cắt bỏ chân trang trước khi ghép ảnh-mục, để số trang không chen giữa mạch văn"
-          value={p.chunking?.cut_padding}
-          defaultValue={chunk.cut_padding}
-          min={LIMITS.chunk_cut_padding.min}
-          max={LIMITS.chunk_cut_padding.max}
-          unit="px"
-          onChange={(v) => setChunk({ cut_padding: v })}
-        />
-        <NumberSetting
-          label="Chiều cao mục tối thiểu"
-          hint="Mục thấp hơn ngưỡng coi như chỉ có tiêu đề, gộp vào mục trước. Tăng lên nếu thấy nhiều mục rỗng"
-          value={p.chunking?.min_section_height_px}
-          defaultValue={chunk.min_section_height_px}
-          min={LIMITS.min_section_height.min}
-          max={LIMITS.min_section_height.max}
-          unit="px"
-          onChange={(v) => setChunk({ min_section_height_px: v })}
-        />
-      </SettingGroup>
-
-      <SettingGroup
-        title="LLM sửa cây mục lục"
-        description="Layout model biết đây là tiêu đề nhưng không biết 5.4.2 là con của 5.4. LLM lọc tiêu đề giả và dựng quan hệ cha-con."
-      >
-        <TextSetting
-          label="Model"
-          hint="Chỉ là lệnh gọi API nên đổi được không cần khởi động lại"
-          value={p.toc_validator?.model_name}
-          defaultValue={toc.model_name}
-          mono
-          onChange={(v) => setToc({ model_name: v })}
-        />
-        <NumberSetting
-          label="Temperature"
-          hint="Thấp cho cây mục lục ổn định"
-          value={p.toc_validator?.temperature}
-          defaultValue={toc.temperature}
-          min={LIMITS.temperature.min}
-          max={LIMITS.temperature.max}
-          step={LIMITS.temperature.step}
-          onChange={(v) => setToc({ temperature: v })}
-        />
-      </SettingGroup>
-    </>
-  );
-}
-
-/* ---------- Tab 4: không đổi nóng được ---------- */
-
-function LockedTab({ data }: { data: SettingsResponse }) {
-  const e = data.indexing.embedding;
-  const v = data.indexing.vectordb;
-
-  return (
-    <>
-      <div className="flex items-start gap-2 rounded-md border border-destructive/25 bg-destructive/[0.04] px-3 py-2.5">
-        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
-        <p className="text-sm text-muted-foreground">
-          Những tham số này không đổi nóng được. Sửa trong <code>.env</code> rồi khởi
-          động lại service. Riêng nhóm embedding, đổi xong{" "}
-          <strong className="text-foreground">phải index lại toàn bộ tài liệu</strong>{" "}
-          vì vector cũ tính theo tham số cũ, không so được với vector mới.
-        </p>
-      </div>
-
-      <SettingGroup title="Embedding">
-        <LockedSetting
-          label="Loại retriever"
-          value={e.type}
-          reason="Model đã nạp vào VRAM lúc khởi động"
-          envVar="EMBEDDING_TYPE"
-        />
-        <LockedSetting
-          label="Model"
-          value={e.model_name}
-          mono
-          reason="Model đã nạp vào VRAM lúc khởi động"
-          envVar="EMBEDDING_MODEL_NAME"
-        />
-        <LockedSetting
-          label="Thiết bị"
-          value={e.device}
-          reason="Model đã nạp trên thiết bị này"
-          envVar="EMBEDDING_DEVICE"
-        />
-        <LockedSetting
-          label="Số chiều vector"
-          value={e.dim}
-          reason="Collection trong vector DB đã tạo theo số chiều này"
-          envVar="EMBEDDING_DIM"
-        />
-        <LockedSetting
-          label="Visual token tối đa"
-          value={e.max_num_visual_tokens.toLocaleString("vi-VN")}
-          reason="Vector đã index tính theo giá trị này. Đổi thì phải index lại toàn bộ"
-          envVar="EMBEDDING_MAX_NUM_VISUAL_TOKENS"
-        />
-        <LockedSetting
-          label="Chiều rộng tối thiểu"
-          value={e.min_width ? `${e.min_width} px` : "không đặt"}
-          reason="Quyết định độ nét chữ khi resize ảnh-mục. Vector đã index theo giá trị này"
-          envVar="EMBEDDING_MIN_WIDTH"
-        />
-        <LockedSetting
-          label="Vector mỗi ảnh-mục"
-          value={e.doc_dim.toLocaleString("vi-VN")}
-          reason={`Tính ra: ${e.max_num_visual_tokens} visual token + ${e.prefix_num_tokens} prefix`}
-        />
-        <LockedSetting
-          label="Chế độ batching"
-          value={e.batching_mode}
-          reason="Đọc lúc khởi tạo embedding manager"
-          envVar="EMBEDDING_BATCHING_MODE"
-        />
-        <LockedSetting
-          label="Ngân sách token mỗi batch"
-          value={e.max_token.toLocaleString("vi-VN")}
-          reason="Sort ảnh theo số token rồi gộp batch theo ngân sách để giảm padding"
-          envVar="EMBEDDING_MAX_TOKEN"
-        />
-      </SettingGroup>
-
-      <SettingGroup title="Vector database">
-        <LockedSetting
-          label="Loại"
-          value={v.type}
-          reason="Client đã kết nối theo loại này"
-          envVar="VECTORDB_TYPE"
-        />
-        <LockedSetting
-          label="URI"
-          value={v.uri}
-          mono
-          reason="Client đã kết nối tới địa chỉ này"
-          envVar="VECTORDB_URI"
-        />
-        <LockedSetting
-          label="Collection"
-          value={v.collection_name}
-          mono
-          reason="Schema collection đã tạo theo cấu hình hiện tại"
-          envVar="VECTORDB_COLLECTION_NAME"
-        />
-        <LockedSetting
-          label="Giới hạn tìm kiếm"
-          value={v.search_limit.toLocaleString("vi-VN")}
-          reason="Đọc lúc khởi tạo client"
-          envVar="VECTORDB_SEARCH_LIMIT"
-        />
-      </SettingGroup>
-
-      <SettingGroup title="Model nhận diện">
-        <LockedSetting
-          label="Model nhận diện bố cục"
-          value={data.document.layout.model_name}
-          mono
-          reason="Model đã nạp vào VRAM lúc worker khởi động"
-        />
-        <LockedSetting
-          label="Model dò chữ"
-          value={data.document.preprocess.text_model}
-          mono
-          reason="Model đã nạp vào VRAM lúc worker khởi động"
-        />
-      </SettingGroup>
-
-      <SettingGroup title="VLM và LLM">
-        <LockedSetting
-          label="VLM model"
-          value={data.models.vlm.model_name}
-          mono
-          reason="Đổi được nhưng phải khớp với model vLLM đang serve"
-          envVar="VLM_MODEL_NAME"
-        />
-        <LockedSetting
-          label="VLM endpoint"
-          value={data.models.vlm.endpoint}
-          mono
-          reason="Client đã tạo theo endpoint này"
-          envVar="VLM_ENDPOINT"
-        />
-        <LockedSetting
-          label="VLM API key"
-          value={data.models.vlm.api_key_configured ? "đã cấu hình" : "chưa có"}
-          reason="Secret không bao giờ trả ra khỏi server"
-          envVar="OPENAI_API_KEY"
-        />
-      </SettingGroup>
-
-      <SettingGroup title="Lưu trữ">
-        <LockedSetting
-          label="Thư mục metadata"
-          value={data.metadata_dir}
-          mono
-          reason="Worker và backend phải trỏ chung một volume"
-          envVar="METADATA_DIR"
-        />
-        <LockedSetting
-          label="Mức log"
-          value={data.log_level}
-          reason="Đọc lúc khởi động service"
-          envVar="LOG_LEVEL"
-        />
-      </SettingGroup>
-    </>
-  );
-}
-
-/* ---------- Phụ trợ ---------- */
-
-function countOverrides<T extends object>(current: T, defaults: T): number {
+function countAskOverrides(current: AskOverrides, defaults: AskOverrides) {
   let count = 0;
-  for (const key of Object.keys(current) as (keyof T)[]) {
-    const value = current[key];
-    if (value === undefined) continue;
-    if (defaults[key] === undefined || value !== defaults[key]) count += 1;
-  }
+  if (current.topK !== undefined && current.topK !== defaults.topK) count++;
+  if (current.useTocRewrite !== undefined && current.useTocRewrite !== defaults.useTocRewrite) count++;
+  if (current.vlmTemperature !== undefined && current.vlmTemperature !== defaults.vlmTemperature) count++;
   return count;
 }
 
-function countNested(obj: object): number {
+function countNested(obj: Record<string, unknown>) {
   let count = 0;
   for (const value of Object.values(obj)) {
-    if (value === undefined || value === null) continue;
-    if (typeof value === "object" && !Array.isArray(value)) {
-      count += countNested(value as object);
-      continue;
-    }
-    count += 1;
+    if (value !== undefined) count += 1;
   }
   return count;
-}
-
-function LoadingRows() {
-  return (
-    <div className="space-y-2" aria-busy="true">
-      <Skeleton className="h-12" />
-      <Skeleton className="h-12" />
-      <Skeleton className="h-12" />
-      <Skeleton className="h-12" />
-    </div>
-  );
-}
-
-function BackendOffline() {
-  return (
-    <div className="rounded-md border border-dashed px-4 py-10 text-center" role="status">
-      <Lock className="mx-auto size-5 text-muted-foreground/70" aria-hidden />
-      <p className="mt-3 text-[15px] font-medium">Chưa đọc được cấu hình</p>
-      <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-        Giá trị mặc định lấy từ server nên cần backend chạy. Bạn vẫn đổi được tham số
-        nhưng sẽ không thấy giá trị gốc để so.
-      </p>
-    </div>
-  );
 }

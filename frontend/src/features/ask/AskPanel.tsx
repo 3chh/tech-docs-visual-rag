@@ -8,6 +8,7 @@ import type { AskOverrides } from "@/features/settings/types";
 import { api } from "@/lib/api";
 import type { AskTurn, SearchResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 import { AnswerBlock } from "./AnswerBlock";
 import { AskComposer } from "./AskComposer";
@@ -39,6 +40,7 @@ export function AskPanel({
   const [internalTurns, setInternalTurns] = useState<AskTurn[]>([]);
   const [internalActiveSource, setInternalActiveSource] = useState<SearchResult | null>(null);
 
+  const { t } = useI18n();
   const turns = controlledTurns ?? internalTurns;
   const setTurns = useCallback(
     (updater: AskTurn[] | ((prev: AskTurn[]) => AskTurn[])) => {
@@ -154,8 +156,8 @@ export function AskPanel({
         {/* Chat Header / Action Bar */}
         <div className="flex h-11 shrink-0 items-center justify-between border-b bg-muted/20 px-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="size-2 rounded-full bg-primary animate-pulse" />
-            <span>Hỏi đáp trực quan theo trang gốc</span>
+            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>{t("empty_chat_title")}</span>
           </div>
 
           {!isCanvasOpen && (
@@ -163,10 +165,10 @@ export function AskPanel({
               variant="outline"
               size="sm"
               onClick={() => setIsCanvasOpen(true)}
-              className="h-7 gap-1.5 text-xs text-primary font-medium"
+              className="h-7 gap-1.5 text-xs text-emerald-600 font-medium"
             >
               <Columns className="size-3.5" />
-              <span>Mở Canvas tài liệu</span>
+              <span>{t("open_canvas_btn")}</span>
             </Button>
           )}
         </div>
@@ -177,8 +179,8 @@ export function AskPanel({
             {turns.length === 0 ? (
               <EmptyState
                 icon={Search}
-                title={`Tra cứu tài liệu trong ${collection}`}
-                description="Visual RAG đọc trực tiếp ảnh chụp trang gốc nên nắm bắt trọn vẹn cả bảng biểu, công thức toán và sơ đồ hình vẽ phức tạp. Mọi câu trả lời đều có trích dẫn trang đối soát."
+                title={t("empty_chat_title")}
+                description={t("empty_chat_desc")}
                 action={
                   <ul className="w-full max-w-md space-y-2 mt-4">
                     {SAMPLE_QUESTIONS.map((question) => (
@@ -217,7 +219,7 @@ export function AskPanel({
           onChange={setDraft}
           onSubmit={() => void ask()}
           isBusy={isBusy}
-          placeholder="Đặt câu hỏi về công thức, thông số hoặc điều khoản trong tài liệu..."
+          placeholder={t("ask_placeholder")}
         />
       </div>
 

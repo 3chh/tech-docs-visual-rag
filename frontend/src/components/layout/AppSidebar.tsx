@@ -1,9 +1,14 @@
 import {
   BookOpen,
   Check,
+  FileStack,
   Layers,
+  ListTree,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
+  SquarePen,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
@@ -15,7 +20,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
@@ -24,8 +28,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSkeleton,
+  useSidebar,
 } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { UserMenu } from "@/features/auth";
 import { useCollections } from "@/hooks/use-api";
+import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export interface SessionSummary {
@@ -35,7 +43,11 @@ export interface SessionSummary {
   updatedAt: number;
 }
 
+export type AreaId = "ask" | "documents" | "outline";
+
 interface AppSidebarProps {
+  currentArea: AreaId;
+  onAreaChange: (area: AreaId) => void;
   collection: string;
   onCollectionChange: (collection: string) => void;
   sessions?: SessionSummary[];
@@ -43,10 +55,12 @@ interface AppSidebarProps {
   onSelectSession?: (id: string) => void;
   onNewChat?: () => void;
   onDeleteSession?: (id: string) => void;
-  settingsTrigger?: React.ReactNode;
+  onOpenSettings?: () => void;
 }
 
 export function AppSidebar({
+  currentArea,
+  onAreaChange,
   collection,
   onCollectionChange,
   sessions = [],
@@ -54,16 +68,17 @@ export function AppSidebar({
   onSelectSession,
   onNewChat,
   onDeleteSession,
-  settingsTrigger,
+  onOpenSettings,
 }: AppSidebarProps) {
   const { data: collections, isLoading, isError, refetch } = useCollections();
   const [isAddingCollection, setIsAddingCollection] = useState(false);
   const [draftCollection, setDraftCollection] = useState("");
+  const { state, toggleSidebar } = useSidebar();
+  const isCollapsed = state === "collapsed";
+  const { t } = useI18n();
 
   const items = collections ?? [];
   const isKnown = items.includes(collection);
-
-  // Filter sessions for the currently selected collection (or all if desired)
   const collectionSessions = sessions.filter((s) => s.collection === collection);
 
   function commitDraftCollection() {
@@ -73,56 +88,151 @@ export function AppSidebar({
     setIsAddingCollection(false);
   }
 
+  // Danh sách các Tab khu vực làm việc
+  const NAV_TABS: { id: AreaId; label: string; icon: typeof MessageSquare }[] = [
+    { id: "ask", label: t("nav_chat"), icon: MessageSquare },
+    { id: "documents", label: t("nav_documents"), icon: FileStack },
+    { id: "outline", label: t("nav_outline"), icon: ListTree },
+  ];
+
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
-      {/* App Header & Brand */}
-      <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-            <BookOpen className="size-4" aria-hidden />
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar select-none">
+      {/* 1. Header: Brand + Collapse Toggle + New Chat Button */}
+      <SidebarHeader className="border-b border-sidebar-border p-2.5">
+        <div className="flex items-center justify-between gap-2">
+          {/* Logo & App title (Ẩn khi thu gọn) */}
+          <div className="flex items-center gap-2 min-w-0 group-data-[collapsible=icon]:hidden">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white shadow-xs">
+              <BookOpen className="size-4" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-semibold text-xs leading-tight text-sidebar-foreground">
+                {t("app_name")}
+              </p>
+              <p className="truncate text-[10px] text-muted-foreground font-mono">
+                {t("app_tagline")}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <p className="truncate font-semibold text-sm leading-tight text-sidebar-foreground">
-              Cosmo ChatPDF
-            </p>
-            <p className="truncate text-[11px] text-muted-foreground font-mono">
-              Visual RAG Workspace
-            </p>
-          </div>
+
+          {/* Nút Toggle Sidebar */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleSidebar}
+                className="size-7 shrink-0 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+                aria-label="Thu gọn hoặc mở rộng sidebar"
+              >
+                {isCollapsed ? (
+                  <PanelLeftOpen className="size-4" />
+                ) : (
+                  <PanelLeftClose className="size-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={10}>
+              {isCollapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
+            </TooltipContent>
+          </Tooltip>
         </div>
 
-        {/* Primary Action: "+ Cuộc trò chuyện mới" */}
+        {/* Nút "+ Cuộc trò chuyện mới" chuẩn ChatGPT */}
         {onNewChat && (
-          <div className="mt-3 group-data-[collapsible=icon]:mt-2">
-            <Button
-              onClick={onNewChat}
-              className="w-full justify-start gap-2 bg-primary/95 text-primary-foreground hover:bg-primary font-medium text-xs h-9 shadow-sm group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center"
-              title="Tạo cuộc trò chuyện mới"
-            >
-              <Plus className="size-4 shrink-0" />
-              <span className="group-data-[collapsible=icon]:hidden">Cuộc trò chuyện mới</span>
-            </Button>
+          <div className="mt-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={onNewChat}
+                  className={cn(
+                    "w-full justify-start gap-2 bg-emerald-600 text-white hover:bg-emerald-700 font-medium text-xs h-8.5 shadow-xs transition-colors",
+                    "group-data-[collapsible=icon]:size-7.5 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:mx-auto",
+                  )}
+                >
+                  <SquarePen className="size-3.5 shrink-0" />
+                  <span className="group-data-[collapsible=icon]:hidden">
+                    {t("nav_new_chat")}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              {isCollapsed && (
+                <TooltipContent side="right" sideOffset={10}>
+                  {t("nav_new_chat")}
+                </TooltipContent>
+              )}
+            </Tooltip>
           </div>
         )}
       </SidebarHeader>
 
-      <SidebarContent className="gap-2">
-        {/* SECTION 1: Bộ tài liệu (Collections) */}
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Bộ tài liệu
+      <SidebarContent className="gap-1.5 p-2">
+        {/* 2. MAIN WORKSPACE TABS (Được chuyển vào Sidebar) */}
+        <SidebarGroup className="p-0">
+          <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 px-2 py-1 group-data-[collapsible=icon]:hidden">
+            Không gian làm việc
           </SidebarGroupLabel>
-          <SidebarGroupAction
-            title="Thêm bộ tài liệu mới"
-            onClick={() => setIsAddingCollection((v) => !v)}
-          >
-            <Plus className="size-3.5" aria-hidden />
-            <span className="sr-only">Thêm bộ tài liệu</span>
-          </SidebarGroupAction>
+
+          <SidebarGroupContent>
+            <SidebarMenu className="space-y-0.5">
+              {NAV_TABS.map(({ id, label, icon: Icon }) => {
+                const isActive = currentArea === id;
+                return (
+                  <SidebarMenuItem key={id}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton
+                          isActive={isActive}
+                          onClick={() => onAreaChange(id)}
+                          className={cn(
+                            "h-8.5 rounded-md px-2.5 text-xs transition-all",
+                            // Tô màu xanh lá nổi bật cho Tab được chọn theo đúng yêu cầu người dùng
+                            isActive
+                              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-semibold border-l-3 border-emerald-600 shadow-2xs"
+                              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                          )}
+                        >
+                          <Icon
+                            className={cn(
+                              "size-4 shrink-0",
+                              isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+                            )}
+                          />
+                          <span className="truncate group-data-[collapsible=icon]:hidden">
+                            {label}
+                          </span>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      {isCollapsed && (
+                        <TooltipContent side="right" sideOffset={10}>
+                          {label}
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* 3. BỘ TÀI LIỆU (COLLECTIONS) */}
+        <SidebarGroup className="p-0 mt-2">
+          <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 px-2 py-1 flex items-center justify-between group-data-[collapsible=icon]:hidden">
+            <span>{t("collections_title")}</span>
+            <button
+              type="button"
+              onClick={() => setIsAddingCollection((v) => !v)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title={t("add_collection")}
+            >
+              <Plus className="size-3.5" />
+            </button>
+          </SidebarGroupLabel>
 
           <SidebarGroupContent>
             {isAddingCollection && (
-              <div className="px-2 pb-2 group-data-[collapsible=icon]:hidden">
+              <div className="px-1.5 pb-2 group-data-[collapsible=icon]:hidden">
                 <Input
                   autoFocus
                   value={draftCollection}
@@ -135,49 +245,47 @@ export function AppSidebar({
                     }
                   }}
                   onBlur={commitDraftCollection}
-                  placeholder="Tên bộ tài liệu..."
-                  className="h-8 text-xs font-mono"
-                  aria-label="Tên bộ tài liệu mới"
+                  placeholder={t("new_collection_placeholder")}
+                  className="h-7 text-xs font-mono"
+                  aria-label={t("new_collection_placeholder")}
                 />
               </div>
             )}
 
-            <SidebarMenu>
+            <SidebarMenu className="space-y-0.5">
               {isLoading && (
                 <>
-                  <SidebarMenuItem>
-                    <SidebarMenuSkeleton showIcon />
-                  </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuSkeleton showIcon />
                   </SidebarMenuItem>
                 </>
               )}
 
-              {/* Nếu bộ đang chọn chưa có trong danh sách thì vẫn hiển thị */}
               {!isLoading && !isKnown && collection && (
-                <CollectionItem
+                <CollectionMenuItem
                   name={collection}
                   isActive
                   onSelect={() => onCollectionChange(collection)}
+                  isCollapsed={isCollapsed}
                 />
               )}
 
               {items.map((name) => (
-                <CollectionItem
+                <CollectionMenuItem
                   key={name}
                   name={name}
                   isActive={name === collection}
                   onSelect={() => onCollectionChange(name)}
+                  isCollapsed={isCollapsed}
                 />
               ))}
 
               {isError && (
-                <div className="px-2 py-1.5 group-data-[collapsible=icon]:hidden">
+                <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
                   <Button
                     variant="link"
                     size="sm"
-                    className="h-auto p-0 text-xs text-destructive"
+                    className="h-auto p-0 text-[11px] text-destructive"
                     onClick={() => void refetch()}
                   >
                     Tải lại danh sách
@@ -188,35 +296,46 @@ export function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* SECTION 2: Lịch sử hội thoại (Chat Sessions) */}
-        <SidebarGroup className="min-h-0 flex-1">
-          <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Lịch sử trò chuyện
+        {/* 4. LỊCH SỬ TRÒ CHUYỆN (SESSIONS) */}
+        <SidebarGroup className="p-0 mt-2 min-h-0 flex-1">
+          <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 px-2 py-1 group-data-[collapsible=icon]:hidden">
+            {t("chat_history_title")}
           </SidebarGroupLabel>
 
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="space-y-0.5">
               {collectionSessions.length === 0 ? (
-                <div className="px-3 py-2 text-[11px] text-muted-foreground italic group-data-[collapsible=icon]:hidden">
-                  Chưa có hội thoại nào trong bộ này.
+                <div className="px-2 py-1.5 text-[11px] text-muted-foreground/70 italic group-data-[collapsible=icon]:hidden">
+                  {t("no_history")}
                 </div>
               ) : (
                 collectionSessions.map((session) => {
                   const isActive = session.id === currentSessionId;
                   return (
                     <SidebarMenuItem key={session.id}>
-                      <SidebarMenuButton
-                        isActive={isActive}
-                        onClick={() => onSelectSession?.(session.id)}
-                        tooltip={session.title}
-                        className={cn(
-                          "group/session text-xs",
-                          isActive && "font-medium bg-sidebar-accent text-sidebar-accent-foreground",
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton
+                            isActive={isActive}
+                            onClick={() => {
+                              onSelectSession?.(session.id);
+                              onAreaChange("ask");
+                            }}
+                            className={cn(
+                              "h-7.5 rounded-md px-2 text-xs",
+                              isActive && "font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                            )}
+                          >
+                            <MessageSquare className="size-3.5 shrink-0 text-muted-foreground" />
+                            <span className="truncate flex-1">{session.title}</span>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        {isCollapsed && (
+                          <TooltipContent side="right" sideOffset={10}>
+                            {session.title}
+                          </TooltipContent>
                         )}
-                      >
-                        <MessageSquare className="size-3.5 shrink-0 text-muted-foreground group-hover/session:text-primary" />
-                        <span className="truncate flex-1">{session.title}</span>
-                      </SidebarMenuButton>
+                      </Tooltip>
 
                       {onDeleteSession && (
                         <SidebarMenuAction
@@ -225,11 +344,10 @@ export function AppSidebar({
                             e.stopPropagation();
                             onDeleteSession(session.id);
                           }}
-                          title="Xoá hội thoại này"
-                          className="hover:text-destructive"
+                          title={t("delete_session")}
+                          className="hover:text-destructive size-6"
                         >
-                          <Trash2 className="size-3.5" />
-                          <span className="sr-only">Xoá</span>
+                          <Trash2 className="size-3" />
                         </SidebarMenuAction>
                       )}
                     </SidebarMenuItem>
@@ -241,54 +359,52 @@ export function AppSidebar({
         </SidebarGroup>
       </SidebarContent>
 
-      {/* Sidebar Footer: Settings & Engine Status */}
+      {/* 5. Footer: User Avatar Menu (ChatGPT / Claude Style) */}
       <SidebarFooter className="border-t border-sidebar-border p-2">
-        {settingsTrigger && (
-          <div className="w-full">
-            {settingsTrigger}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between px-2 py-1 text-[11px] text-muted-foreground group-data-[collapsible=icon]:hidden">
-          <span className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Engine: 2005</span>
-          </span>
-          <span className="font-mono text-[10px]">v1.0-visual</span>
-        </div>
+        <UserMenu onOpenSettings={onOpenSettings} collapsed={isCollapsed} />
       </SidebarFooter>
     </Sidebar>
   );
 }
 
-function CollectionItem({
+function CollectionMenuItem({
   name,
   isActive,
   onSelect,
+  isCollapsed,
 }: {
   name: string;
   isActive: boolean;
   onSelect: () => void;
+  isCollapsed: boolean;
 }) {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        isActive={isActive}
-        onClick={onSelect}
-        tooltip={name}
-        className={cn(
-          "font-mono text-xs flex items-center justify-between",
-          isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <SidebarMenuButton
+            isActive={isActive}
+            onClick={onSelect}
+            className={cn(
+              "h-7.5 rounded-md px-2 font-mono text-xs flex items-center justify-between",
+              isActive && "bg-sidebar-accent text-sidebar-accent-foreground font-semibold",
+            )}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Layers className="size-3.5 shrink-0 text-primary/80" aria-hidden />
+              <span className="truncate">{name}</span>
+            </div>
+            {isActive && (
+              <Check className="size-3 shrink-0 text-emerald-600 group-data-[collapsible=icon]:hidden" />
+            )}
+          </SidebarMenuButton>
+        </TooltipTrigger>
+        {isCollapsed && (
+          <TooltipContent side="right" sideOffset={10}>
+            {name}
+          </TooltipContent>
         )}
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <Layers className="size-3.5 shrink-0 text-primary/80" aria-hidden />
-          <span className="truncate">{name}</span>
-        </div>
-        {isActive && (
-          <Check className="size-3 shrink-0 text-primary group-data-[collapsible=icon]:hidden" />
-        )}
-      </SidebarMenuButton>
+      </Tooltip>
     </SidebarMenuItem>
   );
 }

@@ -11,6 +11,7 @@ export interface PdfToImageOverrides {
   min_dpi?: number;
   anchor_size?: number;
   thread_count?: number;
+  vertical_split?: boolean;
 }
 
 export interface PreprocessOverrides {
