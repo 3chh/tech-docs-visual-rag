@@ -5,7 +5,7 @@ export const en: TranslationDictionary = {
   app_tagline: "Visual RAG Workspace",
 
   // Navigation & Tabs
-  nav_chat: "Chat & Canvas",
+  nav_chat: "Lookup",
   nav_documents: "Documents",
   nav_outline: "Outline",
   nav_new_chat: "New Chat",

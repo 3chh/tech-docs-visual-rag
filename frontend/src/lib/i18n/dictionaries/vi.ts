@@ -5,7 +5,7 @@ export const vi: TranslationDictionary = {
   app_tagline: "Không gian làm việc Visual RAG",
 
   // Navigation & Tabs
-  nav_chat: "Hỏi đáp & Canvas",
+  nav_chat: "Tra cứu",
   nav_documents: "Tài liệu",
   nav_outline: "Cây mục lục",
   nav_new_chat: "Cuộc trò chuyện mới",
