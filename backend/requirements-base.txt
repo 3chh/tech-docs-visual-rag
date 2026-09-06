@@ -5,7 +5,11 @@ pydantic==2.10.4
 python-multipart==0.0.20
 PyYAML==6.0.2
 requests==2.32.3
-openai==1.59.6
+# Không pin cứng được: paddleocr -> paddlex[ie] -> langchain-openai đòi
+# openai>=1.63, nên pin 1.59.6 làm build worker fail với ResolutionImpossible.
+# Chặn trần <2 vì code dùng API 1.x (`from openai import OpenAI`), openai 2.x
+# và 3.x có breaking change.
+openai>=1.63,<2
 Pillow==11.1.0
 tqdm==4.67.1
 cryptography==44.0.0
