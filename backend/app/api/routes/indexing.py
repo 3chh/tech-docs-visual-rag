@@ -119,7 +119,10 @@ async def upload_files(
             # metadata; validate qua ProcessingOverrides để chặn giá trị vô lý.
             overrides = ProcessingOverrides(
                 max_pages=file_meta.get("max_pages"),
-                vertical_split=file_meta.get("vertical_split", False),
+                # Không mặc định False: to_worker_config() bỏ None nên thiếu
+                # trường thì cấu hình của bộ được giữ, còn False là giá trị
+                # thật và sẽ ghi đè cấu hình bộ.
+                vertical_split=file_meta.get("vertical_split"),
                 preprocess=file_meta.get("preprocess"),
                 layout=file_meta.get("layout"),
                 ocr=file_meta.get("ocr"),

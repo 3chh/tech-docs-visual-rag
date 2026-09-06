@@ -8,6 +8,7 @@ import requests
 from ...core.collections import require_config
 from ...core.config import get_settings
 from ...core.logging import get_logger
+from ...core.merge import deep_merge
 from ...core.providers import resolve_connection
 from ...embeddings import get_embedding_manager
 from ...vectordb import get_vector_manager
@@ -81,17 +82,22 @@ class IndexingService:
         """Xử lý và index một file PDF. Trả về danh sách đường dẫn ảnh-mục."""
         import torch
 
-        custom_config = dict(custom_config or {})
+        # Cấu hình đã lưu của bộ làm nền, override của từng file đè lên. Không
+        # trộn ở route vì cả /index và /upload_files đều đi qua đây.
+        custom_config = deep_merge(self.config.processing, custom_config)
         if max_pages is not None:
-            custom_config.setdefault("max_pages", max_pages)
+            custom_config["max_pages"] = max_pages
 
         # Worker cần biết dùng LLM nào để sửa cây mục lục. Giải ở đây thay vì
         # ở worker, để worker không phải đọc kho kết nối.
         llm = resolve_connection(self.config.llm_connection_id, "llm")
         custom_config["toc_validator"] = {
+            # Bộ đè được model_name (ví dụ dùng model rẻ hơn cho việc sửa mục
+            # lục), nhưng endpoint và key thì luôn lấy từ kho kết nối — đó là
+            # thông tin xác thực, không phải tham số điều chỉnh.
+            "model_name": llm.model_name,
             **(custom_config.get("toc_validator") or {}),
             "endpoint": llm.endpoint,
-            "model_name": llm.model_name,
             "api_key": llm.api_key,
         }
 
