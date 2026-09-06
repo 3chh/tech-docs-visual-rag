@@ -1,5 +1,8 @@
 # API service: embed ảnh-mục + truy xuất vector
-# Cài trước: pip install torch --index-url https://download.pytorch.org/whl/cu121
+# torch KHÔNG có ở đây: nó đến từ base image pytorch/pytorch:2.7.0-cuda12.8
+# trong Dockerfile. Chạy ngoài Docker thì cài trước, và phải đúng bản CUDA của
+# card — GPU Blackwell (sm_120) cần cu128 trở lên:
+#   pip install torch==2.7.0 --index-url https://download.pytorch.org/whl/cu128
 -r requirements-base.txt
 
 colpali-engine==0.3.12

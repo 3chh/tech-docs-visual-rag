@@ -1,255 +1,242 @@
-# Cosmo ChatPDF
+# TechDocs Visual RAG
 
-Hỏi–đáp trên tài liệu PDF scan bằng **Visual RAG cấp mục**.
+> **Section-Level Visual RAG for Technical Documentation, Engineering Manuals, and Standards Verification**
 
-Hệ thống **không trích xuất text từ PDF**. Mỗi trang được coi là ảnh, embed trực tiếp bằng ColQwen (vision-language retriever), và một VLM đọc thẳng ảnh tài liệu để trả lời. Điểm khác biệt so với Visual RAG thông thường: đơn vị truy xuất không phải **trang** mà là **mục theo mục lục thật** của tài liệu — mỗi mục là một ảnh dài ghép từ nhiều trang.
-
-Phù hợp với tài liệu kỹ thuật dày, phân cấp sâu, nhiều công thức và bảng, chỉ tồn tại dưới dạng scan (tiêu chuẩn kỹ thuật, quy chuẩn, sổ tay tra cứu).
-
----
-
-## Kiến trúc
-
-```
-                    ┌──────────────┐         ┌──────────────┐
-                    │   Frontend   │ ──────► │     vLLM     │  :3333
-                    │  Gradio 7860 │  HTTP   │  VLM đọc ảnh │  Docker image
-                    │  (không GPU) │         │     GPU      │  vllm/vllm-openai
-                    └──────┬───────┘         └──────▲───────┘
-                           │ HTTP                   │
-                    ┌──────▼───────┐                │
-       ┌────────────┤   Backend    ├────────────────┘
-       │            │  FastAPI 2005│
-       │            │  ColQwen GPU │
-       │ HTTP       └──────┬───────┘
-       │                   │ gRPC
-┌──────▼───────┐    ┌──────▼───────┐
-│  PDF Worker  │    │    Qdrant    │  :6333 / :6334
-│ PaddleOCR GPU│    │ multi-vector │
-│    :2222     │    └──────────────┘
-└──────┬───────┘
-       │ ghi ảnh-mục
-┌──────▼───────────────┐
-│ volume /data (chung) │  worker ghi, backend và frontend đọc
-└──────────────────────┘
-```
-
-Các service tách riêng vì **profile tài nguyên khác nhau**: worker giữ PaddleOCR + layout model, backend giữ ColQwen, vLLM giữ VLM, frontend không nạp model nào. Gộp chung một tiến trình sẽ hết VRAM.
-
-### Cổng
-
-Map khớp bản `chatpdf_ver_2` cũ nên **`agent_tung` và client hiện có không phải sửa gì**:
-
-| Service | Cổng | Ai gọi |
-|---|---|---|
-| vLLM | **3333** | `agent_tung` → `custom_llm.base_url` |
-| Backend | **2005** | `agent_tung` → `chunk_search_tool.url` |
-| Worker | **2222** | Backend gọi nội bộ |
-| Qdrant | 6333 / 6334 | Backend gọi nội bộ |
-| Frontend | 7860 | Trình duyệt |
-
-Đổi cổng bằng biến trong `.env` (`BACKEND_PORT`, `VLLM_PORT`…).
-
-### Luồng xử lý
-
-**Index** — PDF → ảnh (DPI động, tách đôi trang, cắt lề) → layout detection → suy biên mục từ vị trí tiêu đề → OCR một lần lưu ra JSON → **LLM sửa cây mục lục** → ghép ảnh-mục + transform toạ độ công thức → embed ColQwen → Qdrant.
-
-**Truy vấn** — câu hỏi → **viết lại theo mục lục thật của corpus** → embed → truy xuất 2 tầng (prefetch bằng vector pooled có index, rerank bằng multi-vector đầy đủ) → VLM đọc ảnh-mục → trả lời kèm trích dẫn số trang.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com)
+[![React 18](https://img.shields.io/badge/React-18-61DAFB.svg)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38B2AC.svg)](https://tailwindcss.com/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-ColQwen--2.5-EE4C2C.svg)](https://pytorch.org/)
+[![Qdrant](https://img.shields.io/badge/Qdrant-Multi--Vector-DC2626.svg)](https://qdrant.tech/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 
 ---
 
-## Chỉ xem giao diện (không cần GPU, không cần model)
+## Overview
 
-Muốn kiểm tra build hoặc phát triển frontend:
+**TechDocs Visual RAG** is an advanced visual retrieval-augmented generation system engineered specifically for dense technical documents, scanned engineering manuals, operational handbooks, and compliance standards (e.g., ISO, QCVN, TCVN).
+
+Unlike conventional RAG pipelines that rely on lossy text extraction or single-page image chunking:
+1. **Zero Text Extraction Bottlenecks**: Document pages are treated as high-fidelity visual representations. Embeddings are generated directly via **ColQwen** (vision-language multi-vector retriever), preserving complex layouts, schematics, engineering tables, and mathematical formulas without degradation.
+2. **True Section-Level Retrieval**: Chunks correspond to real hierarchical sections defined in the document's actual Table of Contents (TOC) — stitching cross-page sections into continuous visual units.
+3. **Interactive Document Canvas**: Real-time side-by-side inspection between retrieved section crops and continuous multi-page PDF canvas with synchronized page scrolling, drag-pan, and instant citation jumping.
+4. **Formula & Equation Rendering**: Full mathematical formula support rendering LaTeX expressions via KaTeX.
+
+---
+
+## System Architecture
+
+```
+                    ┌────────────────────────┐         ┌────────────────────────┐
+                    │    Web Application     │ ──────► │       vLLM / VLM       │  :3333
+                    │  React + Vite + shadcn │  HTTP   │  Vision Language Model │  (InternVL3 / Qwen2-VL)
+                    │       (Port 7860)      │         │     GPU Container      │  vllm/vllm-openai
+                    └───────────┬────────────┘         └───────────▲────────────┘
+                                │ HTTP                             │
+                    ┌───────────▼────────────┐                     │
+        ┌───────────┤      API Gateway       ├─────────────────────┘
+        │           │   FastAPI (Port 2005)  │
+        │           │     ColQwen (GPU)      │
+        │ HTTP      └───────────┬────────────┘
+        │                       │ gRPC
+┌───────▼────────┐      ┌───────▼────────┐
+│   PDF Worker   │      │     Qdrant     │  :6333 / :6334
+│ PaddleOCR GPU  │      │  Multi-Vector  │
+│   (Port 2222)  │      └────────────────┘
+└───────┬────────┘
+        │ writes stitched section crops
+┌───────▼────────────────┐
+│   Shared Volume /data  │  Worker writes crops & metadata; API & Web App consume
+└────────────────────────┘
+```
+
+### Decoupled Service Tiering
+Services are strictly separated according to their **VRAM and compute profiles** to prevent out-of-memory (OOM) failures:
+* **API Service** (`:2005`): Houses ColQwen visual multi-vector embeddings and vector search orchestration.
+* **PDF Worker** (`:2222`): Manages PaddleOCR, document layout analysis, and cross-page section image stitching.
+* **vLLM Service** (`:3333`): Hosts the Vision-Language Model (VLM) for answer generation.
+* **Qdrant Vector DB** (`:6333`): Multi-vector storage with two-stage prefetch and reranking.
+* **Web Frontend** (`:7860`): Static production bundle served by high-performance Nginx.
+
+---
+
+## Deployment Profiles
+
+Choose the profile that matches your available hardware:
+
+| Profile Target | Command | Required VRAM | Description |
+|---|---|---|---|
+| **Demo (No GPU)** | `make deploy-demo` | **0 GB** | Lightweight stdlib mock backend + full React UI. Ideal for immediate review and testing. |
+| **Hybrid (Recommended)** | `make deploy-hybrid` | **16 GB** | ColQwen self-hosted locally + VLM via external API (OpenAI / Gemini / Custom). |
+| **Full Stack** | `make deploy-full` | **24 GB** | Completely self-hosted stack including local vLLM (InternVL3-8B). |
+| **Worker Node** | `make deploy-worker-node` | **8 GB** | Dedicated document ingestion & OCR node. |
+| **GPU Query Node** | `make deploy-gpu-node` | **16 GB** | Dedicated retrieval & answer generation node. |
+
+---
+
+## Quick Start
+
+### 1. Instant Preview (No GPU Required)
+
+Run the full modern web interface locally in less than 30 seconds:
 
 ```bash
-cd cosmo-chatpdf
+git clone https://github.com/3chh/tech-docs-visual-rag.git
+cd tech-docs-visual-rag
+
 make deploy-demo
 ```
-
-Lên trong khoảng một phút — frontend + Qdrant + một backend trả dữ liệu mẫu, không nạp model nào, không cần API key. Mở http://localhost:7860.
-
-Đây là kiểu duy nhất không cần NVIDIA Container Toolkit.
+Open **[http://localhost:7860](http://localhost:7860)** in your browser.
 
 ---
 
-## Bắt đầu nhanh (chạy thật)
+### 2. Full GPU Deployment
 
-Chỉ cần Docker + NVIDIA Container Toolkit. **Không cài gì trên máy** — vLLM, ColQwen, PaddleOCR đều chạy trong container và tự tải model.
+**Prerequisites**: Docker Engine with [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
 
 ```bash
-git clone <repo> && cd cosmo-chatpdf
-
+# 1. Setup environment configuration
 cp .env.example .env
-# Điền CREDENTIALS_SECRET — đó là biến bắt buộc duy nhất
-#   openssl rand -base64 32
 
-make deploy-full   # một lệnh, cả stack lên
+# Generate encryption secret for credentials
+openssl rand -base64 32
+# Copy and set CREDENTIALS_SECRET in .env
+
+# 2. Launch complete stack
+make deploy-full
 ```
 
-API key của mô hình **không** nằm trong `.env`. Người dùng nhập trên giao diện,
-key được mã hoá bằng `CREDENTIALS_SECRET` rồi lưu xuống đĩa, và không endpoint
-nào trả lại key gốc — đọc lên chỉ được bản che `sk-proj-••••7890`.
-
-`make deploy-full` có vLLM trong stack nên tạo sẵn một kết nối trỏ vào đó;
-tạo bộ tài liệu, chọn kết nối này là dùng được ngay. Các kiểu deploy khác
-(`deploy-hybrid`) thì tự thêm kết nối OpenAI hoặc Gemini trên giao diện trước.
-
-Lần đầu mất **15–30 phút** để tải model (~15GB). Theo dõi:
-
+#### Monitoring Deployment
 ```bash
-make logs-vllm     # tiến trình tải VLM
-make health        # kiểm tra khi xong
+make logs-vllm     # Follow model weight download & server initialization
+make health        # Verify healthcheck status across all endpoints
+make ps            # Inspect container status
+make down          # Stop all services
 ```
-
-Xong thì mở http://localhost:7860.
-
-Muốn tải model trước cho khỏi chờ lúc khởi động:
-
-```bash
-make pull-models && make deploy-full
-```
-
-```bash
-make help          # xem tất cả lệnh
-make ps            # trạng thái service
-make down          # dừng
-```
-
-Không có GPU thì dùng `make deploy-demo` để xem giao diện. Các kiểu khác đều cần NVIDIA Container Toolkit.
 
 ---
 
-## Model
+### 3. Public Production Deployment with TLS
 
-Hệ thống dùng ba model, hai chạy trên GPU của bạn:
+To deploy in production behind automated TLS (Let's Encrypt) and Caddy reverse proxy:
 
-| Model | Việc | Ở đâu | VRAM |
-|---|---|---|---|
-| **VLM** (InternVL3-8B) | Đọc ảnh-mục, sinh câu trả lời | vLLM trong stack | ~8 GB |
-| **ColQwen 2.5-3B** | Embed ảnh-mục để truy xuất | backend, tự tải | ~10 GB |
-| **PaddleOCR + PP-DocLayout** | Layout detection, OCR | worker, tự tải | ~5 GB |
-| LLM sửa cây mục lục | Sửa cây mục lục sau khi phân tích | Kết nối người dùng chọn cho bộ | 0 |
+```bash
+make deploy-full PUBLIC=1 DOMAIN=docs.yourdomain.com
+```
 
-vLLM chạy bằng **Docker image** `vllm/vllm-openai`, không phải pip install. Model weights tải vào volume `cosmo_hf-cache` dùng chung, chỉ tải một lần.
-
-Chọn model theo VRAM, tách GPU, dùng VLM host sẵn ở nơi khác, xử lý OOM — xem **[docs/MODEL_HOSTING.md](docs/MODEL_HOSTING.md)**.
-
-Nếu đã có vLLM chạy ở máy khác:
-
-Không cần deploy lại: vào giao diện > **Cấu hình** > thêm kết nối với
-provider `custom`, endpoint `http://192.168.1.50:8000/v1`, rồi chọn nó cho bộ
-tài liệu. Dùng `make deploy-hybrid` để khỏi khởi động vLLM trong stack.
+* Binds internal ports to loopback (`127.0.0.1`), exposing only standard web ports (`80/443`).
+* Automatic HTTPS certificate provisioning via Let's Encrypt.
+* Basic authentication gate configurable via `BASIC_AUTH_HASH`.
 
 ---
 
-## Cấu hình
+## Key Features
 
-Mọi giá trị trong `backend/config/config.yaml` đều override được bằng biến môi trường. **`config.yaml` không bao giờ chứa secret** — có test kiểm điều đó.
+### 🔍 Section-Level Hierarchical Retrieval
+* **Dynamic PDF Rasterization**: High-resolution rendering with adaptive DPI, page-splitting, and margin trimming.
+* **Layout-Aware Chunking**: Delineates sections based on actual Table of Contents boundaries rather than arbitrary token counts.
+* **Two-Tier Vector Search**: Fast HNSW prefetch on pooled visual vectors followed by full MaxSim multi-vector late interaction reranking.
 
-API key của mô hình không đi qua env lẫn YAML: người dùng nhập trên giao diện, key được mã hoá bằng `CREDENTIALS_SECRET` rồi lưu trong `data/model_connections.json`. Service vẫn lên được khi chưa có key nào — nếu không thì không ai vào được giao diện để nhập.
+### 🖥️ Dual-Mode Interactive Inspection
+* **Crop Mode**: Inspect cropped image sections directly matched with retrieved answers.
+* **Original Document Canvas**: Seamless switch to continuous multi-page PDF view with mouse wheel scroll, fluid drag-to-pan, and dynamic zoom (25% – 300%).
+* **Active Outline Synchronization**: Expandable Table of Contents tree enabling instant jumps to exact document pages.
 
-| Biến | Mặc định | Ghi chú |
+### 📐 Scientific & Engineering Formula Support
+* Native parsing and client-side KaTeX rendering for complex mathematical formulations, physical parameters, and technical bounds.
+
+### 🔐 Security & Credential Isolation
+* **Zero Keys in Environment**: Model API keys are never stored in plaintext `.env` files or Git.
+* **At-Rest Fernet Encryption**: API keys configured via UI are encrypted using keys derived from `CREDENTIALS_SECRET`.
+* **Masked Delivery**: Secret values are permanently masked (`sk-proj-••••4f2a`) across all API responses.
+
+---
+
+## Configuration Reference
+
+Key configuration options available in `.env`:
+
+| Parameter | Default | Description |
 |---|---|---|
-| `CREDENTIALS_SECRET` | — | **Bắt buộc.** Khoá mã hoá API key người dùng nhập |
-| `DEFAULT_VLM_PROVIDER` | `none` | `builtin` để tạo sẵn kết nối tới vLLM trong stack |
-| `VLM_MODEL_NAME` | `OpenGVLab/InternVL3-8B` | Chọn theo VRAM |
-| `VLLM_GPU_MEMORY_UTILIZATION` | `0.35` | Chừa VRAM cho ColQwen và PaddleOCR |
-| `EMBEDDING_MAX_NUM_VISUAL_TOKENS` | `8192` | Giảm 4096 nếu thiếu VRAM |
-| `EMBEDDING_MIN_WIDTH` | `600` | Chiều rộng tối thiểu khi resize ảnh-mục |
-| `VECTORDB_TYPE` | `qdrant-standalone` | `qdrant-standalone` \| `milvus-lite` \| `milvus-standalone` |
-| `LOG_LEVEL` | `INFO` | `DEBUG` để xem chi tiết từng bước pipeline |
+| `CREDENTIALS_SECRET` | *None* | **Required.** Base64 secret key used for encrypting API credentials at rest. |
+| `DEFAULT_VLM_PROVIDER` | `none` | Set to `builtin` for auto-provisioned internal vLLM in `deploy-full`. |
+| `VLM_MODEL_NAME` | `OpenGVLab/InternVL3-8B` | Target VLM model weights loaded into vLLM. |
+| `VLLM_GPU_MEMORY_UTILIZATION` | `0.35` | Memory cap for vLLM to preserve VRAM for ColQwen and OCR. |
+| `EMBEDDING_MAX_NUM_VISUAL_TOKENS` | `8192` | Maximum visual tokens allocated per section image. |
+| `EMBEDDING_MIN_WIDTH` | `600` | Normalized minimum width for section crops. |
+| `VECTORDB_TYPE` | `qdrant-standalone` | Vector database backend (`qdrant-standalone` \| `milvus-standalone`). |
+| `LOG_LEVEL` | `INFO` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 
-Danh sách đầy đủ: [.env.example](.env.example).
-
----
-
-## Yêu cầu phần cứng
-
-**Tối thiểu: một GPU 24GB** (RTX 4090, A5000) với cấu hình mặc định:
-
-```
-vLLM (InternVL3-8B)      ~8.4 GB
-ColQwen 2.5-3B           ~9.5 GB
-PaddleOCR + layout       ~4.5 GB
-                        ─────────
-                         ~22.4 GB / 24 GB
-```
-
-Sát ngưỡng — chạy được nếu không index sách lớn trong khi có người truy vấn. Máy nhiều GPU thì tách vLLM ra riêng, xem [docs/MODEL_HOSTING.md](docs/MODEL_HOSTING.md).
-
-Đĩa: ~50GB cho image và model cache.
+See [.env.example](.env.example) for the complete list of parameters and documentation.
 
 ---
 
-## Tài liệu từng phần
+## Hardware Sizing Guide
 
-- [docs/MODEL_HOSTING.md](docs/MODEL_HOSTING.md) — **chọn model, chia VRAM, xử lý OOM**
-- [docs/VERIFICATION.md](docs/VERIFICATION.md) — **đã kiểm chứng gì, còn gì phải tự chạy**
-- [docs/MIGRATION.md](docs/MIGRATION.md) — đối chiếu với bản `chatpdf_ver_2` cũ
-- [backend/README.md](backend/README.md) — API reference, chạy local, cấu trúc pipeline
-- [frontend/README.md](frontend/README.md) — giao diện, cấu hình, chạy local
-
----
-
-## Cấu trúc thư mục
-
-```
-cosmo-chatpdf/
-├── backend/
-│   ├── app/              # API service (cổng 8000)
-│   │   ├── api/routes/   # search, indexing, toc, health,
-│   │   │                 #   connections, collections, settings
-│   │   ├── schemas/      # pydantic request/response
-│   │   └── services/     # indexing, retrieval, toc, images
-│   ├── worker/           # PDF worker (cổng 8001)
-│   ├── core/             # config, logging, paths
-│   │                     #   connections + crypto: kho API key mã hoá
-│   │                     #   collections: cấu hình mô hình theo từng bộ
-│   │                     #   builtin: kết nối vLLM tạo sẵn cho deploy-full
-│   ├── embeddings/       # ColQwen/ColPali manager
-│   ├── vectordb/         # Qdrant/Milvus manager
-│   ├── document/         # pipeline xử lý PDF
-│   ├── prompts/
-│   └── tests/
-├── frontend/             # Vite + React + TypeScript + Tailwind
-│   └── src/
-│       ├── features/     # ask, documents, outline, source, settings
-│       ├── components/   # shadcn/ui
-│       └── lib/          # client gọi API
-├── deploy/               # Caddyfile + hướng dẫn chọn kiểu deploy
-├── docker-compose.yml    # mọi kiểu deploy, chọn bằng profile
-└── docker-compose.gpu.yml
-```
-
-Chỉ hai file compose: `docker-compose.yml` chứa mọi kiểu triển khai và chọn
-bằng profile theo khối tài nguyên (`app`, `worker`, `vllm`, `demo`, `prod`) —
-kiểu deploy là tổ hợp các khối, ví dụ `full` = `app,worker,vllm`.
-File GPU phải riêng vì khối cấp GPU làm container không khởi động nổi trên máy
-chưa cài NVIDIA Container Toolkit. Xem [deploy/README.md](deploy/README.md).
+| Setup | Minimum VRAM | Recommended Hardware | Suitable Workload |
+|---|---|---|---|
+| **Demo Mode** | 0 GB | Any modern CPU, 4GB RAM | UI evaluation, layout review, mock testing |
+| **Hybrid Mode** | 16 GB | RTX 4080, RTX 3090, T4, A10G | ColQwen retrieval locally + Cloud VLM (Gemini/OpenAI) |
+| **Full Stack** | 24 GB | RTX 4090, RTX 3090 (24GB), A5000 | Fully offline, on-premise technical RAG |
+| **Multi-GPU** | 2x 16GB+ | 2x RTX 3090 / A10G / A100 | High-throughput concurrent indexing and multi-user querying |
 
 ---
 
-## Phát triển
+## API Endpoints Overview
 
+The backend exposes a clean REST API on port `2005`:
+
+* `GET /health` — Service health verification and version info.
+* `POST /search_with_images` — Semantic section search returning multi-vector matches with base64 visual crops.
+* `POST /ask` — End-to-end question answering proxied through configured VLM provider.
+* `GET /collections` — List all document collections and readiness states.
+* `POST /collections` — Create document collection with designated VLM/LLM connections.
+* `GET /connections` — Retrieve configured model provider connections (masked).
+* `POST /connections` — Register and encrypt model connection credentials.
+* `GET /settings` — Inspect runtime system configurations and override allowances.
+
+Full interactive OpenAPI documentation is accessible at `http://localhost:2005/docs`.
+
+---
+
+## Local Development
+
+### Backend API
 ```bash
-# Backend
+# Setup virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Or .venv\Scripts\activate on Windows
+
 pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-uvicorn backend.app.main:app --reload --port 8000
+uvicorn backend.app.main:app --reload --port 2005
+```
 
-# Worker (tiến trình riêng)
+### PDF Worker
+```bash
 pip install -r backend/requirements-worker.txt
-uvicorn backend.worker.main:app --reload --port 8001
+uvicorn backend.worker.main:app --reload --port 2222
+```
 
-# Frontend
-cd frontend && npm install && npm run dev
+### Web Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-# Test — chạy được không cần GPU
+### Automated Testing
+```bash
+# Run backend test suite (does not require GPU)
 pytest
 ```
 
 ---
 
-## Giấy phép
+## Documentation Links
 
-Nội bộ.
+* **[docs/MODEL_HOSTING.md](docs/MODEL_HOSTING.md)**: Model selection, VRAM allocation strategies, and multi-GPU partitioning.
+* **[docs/VERIFICATION.md](docs/VERIFICATION.md)**: Test verification matrices and deployment checks.
+* **[docs/MIGRATION.md](docs/MIGRATION.md)**: Architectural migration notes and compatibility mappings.
+* **[backend/README.md](backend/README.md)**: Backend modules, pipeline schemas, and algorithms.
+* **[frontend/README.md](frontend/README.md)**: Frontend state architecture, components, and styling guide.

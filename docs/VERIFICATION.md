@@ -53,7 +53,11 @@ docker compose build worker     # thử cái này trước, rủi ro cao nhất
 docker compose build backend
 ```
 
-Rủi ro cao nhất: `paddlepaddle-gpu==3.0.0` lấy từ index riêng của Paddle, hay gãy. Nếu lỗi, thử:
+~~Rủi ro cao nhất: `paddlepaddle-gpu==3.0.0` lấy từ index riêng của Paddle, hay gãy.~~
+**Đã xảy ra thật.** Index đó render bằng JS nên pip không đọc được link wheel
+nào, và PyPI chỉ có `paddlepaddle-gpu` tới 2.6.2 — build worker không thể
+thành công. Đã chuyển sang base image chính thức
+`paddlepaddle/paddle:3.1.0-gpu-cuda12.9-cudnn9.9`. Ghi chú cũ:
 - Bỏ ghim version trong `backend/requirements-worker.txt`
 - Hoặc đổi sang `paddlepaddle` (bản CPU) nếu worker chạy CPU
 
@@ -148,7 +152,10 @@ Mục cuối đáng lưu ý: bản gốc đọc `config.get("provider")` nhưng 
 
 | Rủi ro | Mức | Cách phát hiện sớm |
 |---|---|---|
-| `paddlepaddle-gpu` không cài được | 🔴 | `docker compose build worker` |
+| ~~`paddlepaddle-gpu` không cài được~~ | ✅ đã sửa | Paddle lấy từ base image |
+| Paddle/torch có nhận GPU Blackwell (sm_120) | 🔴 | `docker compose build` rồi `make health` |
+| `paddleocr==3.1.1` với Paddle 3.1.0 | 🔴 | build worker |
+| `colpali-engine==0.3.12` với torch 2.7.0 | 🔴 | build backend |
 | Thuật toán bị đổi ngoài ý muốn khi port | 🟠 | So kết quả với bản gốc (mục 6) |
 | Volume `/data` không chia sẻ đúng | 🟠 | Ảnh không hiện trong UI |
 | VRAM không đủ khi index và truy vấn đồng thời | 🟠 | Giảm `EMBEDDING_MAX_NUM_VISUAL_TOKENS` xuống 4096 |

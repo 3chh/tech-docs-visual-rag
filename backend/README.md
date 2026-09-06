@@ -210,7 +210,8 @@ export METADATA_DIR=$PWD/../data/metadata
 uvicorn backend.worker.main:app --port 8001
 
 # API (terminal khác)
-pip install torch --index-url https://download.pytorch.org/whl/cu121
+# cu128 cho Blackwell (RTX 50xx); card cũ hơn dùng cu121 cũng được
+pip install torch==2.7.0 --index-url https://download.pytorch.org/whl/cu128
 pip install -r requirements.txt
 export METADATA_DIR=$PWD/../data/metadata CREDENTIALS_SECRET=$(openssl rand -base64 32)
 export VECTORDB_URI=http://localhost:6333 PDF_WORKER_ENDPOINT=http://localhost:2222/upload_pdf/

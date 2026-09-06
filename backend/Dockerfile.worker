@@ -1,21 +1,25 @@
 # PDF worker: PaddleOCR + layout detection + ghép ảnh-mục.
 # Tách khỏi API service vì nạp bộ model khác và cần poppler.
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+#
+# Dùng image chính thức của Paddle vì hai lý do:
+#   1. GPU Blackwell (RTX 5090, sm_120) cần Paddle build với CUDA 12.9.
+#   2. Index wheel của Paddle (paddlepaddle.org.cn/packages/...) render bằng
+#      JS nên pip không đọc được link nào, và PyPI chỉ có paddlepaddle-gpu tới
+#      2.6.2 — tức là không có cách nào pip cài được Paddle 3.x. Image đã có
+#      Paddle + CUDA + cuDNN khớp nhau sẵn.
+FROM paddlepaddle/paddle:3.1.0-gpu-cuda12.9-cudnn9.9
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# poppler-utils cho pdf2image; libgl/libglib cho opencv.
+# poppler-utils cho pdf2image; libgl/libglib cho opencv; curl cho HEALTHCHECK.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.11 python3.11-dev python3-pip \
         poppler-utils \
         libgl1 libglib2.0-0 \
         curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python3
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
 

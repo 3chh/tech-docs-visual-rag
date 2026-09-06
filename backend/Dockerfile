@@ -1,6 +1,11 @@
 # API service: nạp ColQwen để embed ảnh-mục và truy vấn.
 # Cần GPU khi chạy thật (EMBEDDING_DEVICE=cuda).
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+#
+# Dùng image torch chính thức thay vì "cuda base + pip install torch": GPU
+# Blackwell (RTX 5090, sm_120) cần torch build với CUDA 12.8. Bản cu121 chỉ có
+# kernel tới sm_90 và chết ngay với "no kernel image is available for execution
+# on the device" — đã kiểm trên máy thật.
+FROM pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -8,21 +13,17 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/data/.cache/huggingface
 
+# curl cho HEALTHCHECK; image torch không có sẵn.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.11 python3.11-dev python3-pip \
         curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python \
-    && ln -sf /usr/bin/python3.11 /usr/bin/python3
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
 
 RUN groupadd --gid 1000 app && \
     useradd --uid 1000 --gid app --create-home app
 
-# torch cài riêng trước để tận dụng cache: nó nặng và hiếm khi đổi version.
-RUN pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
-
+# torch đã nằm trong base image nên requirements.txt không cài lại.
 COPY requirements-base.txt requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
