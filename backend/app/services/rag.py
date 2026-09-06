@@ -24,6 +24,18 @@ logger = get_logger(__name__)
 QUERY_TAG_RE = re.compile(r"<query>(.*?)</query>", re.DOTALL)
 TOC_PREVIEW_LIMIT = 20
 
+# Mặc định của server, dùng khi cả client và cấu hình bộ đều không nói gì.
+DEFAULT_TOP_K = 5
+DEFAULT_USE_TOC_REWRITE = True
+
+
+def _first_set(*values):
+    """Giá trị đầu tiên không phải None. Dùng cho chuỗi ưu tiên cấu hình."""
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
 
 def _encode_image(image_path: str) -> str | None:
     try:
@@ -43,10 +55,12 @@ class RagService:
         self.collection = collection
         self.retrieval = RetrievalService(collection)
 
+        self.config = require_config(collection)
+
         # Mặc định lấy kết nối mà bộ tài liệu này đã chọn lúc tạo. Cho phép
         # ghi đè để thử model khác mà không phải sửa cấu hình bộ.
         if connection_id is None:
-            connection_id = require_config(collection).vlm_connection_id
+            connection_id = self.config.vlm_connection_id
 
         self.model: ResolvedModel = resolve_connection(connection_id, "vlm")
         self._client = None
@@ -145,12 +159,22 @@ class RagService:
     def ask(
         self,
         query: str,
-        top_k: int = 5,
-        system_prompt: str = "",
-        use_toc_rewrite: bool = True,
+        top_k: int | None = None,
+        system_prompt: str | None = None,
+        use_toc_rewrite: bool | None = None,
         toc_preview_limit: int | None = None,
         vlm_temperature: float | None = None,
     ) -> dict:
+        """Thứ tự ưu tiên: tham số client truyền -> cấu hình bộ -> server."""
+        saved = self.config.ask
+        top_k = _first_set(top_k, saved.get("top_k"), DEFAULT_TOP_K)
+        system_prompt = _first_set(system_prompt, saved.get("system_prompt"), "")
+        use_toc_rewrite = _first_set(
+            use_toc_rewrite, saved.get("use_toc_rewrite"), DEFAULT_USE_TOC_REWRITE
+        )
+        toc_preview_limit = _first_set(toc_preview_limit, saved.get("toc_preview_limit"))
+        vlm_temperature = _first_set(vlm_temperature, saved.get("vlm_temperature"))
+
         rewritten: str | None = None
         search_query = query
 

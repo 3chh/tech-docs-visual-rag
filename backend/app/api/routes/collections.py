@@ -28,6 +28,7 @@ from ....core.collections import (
     save_config,
 )
 from ....core.logging import get_logger
+from ...schemas.overrides import AskOverrides, ProcessingOverrides
 from ....core.providers import (
     ConnectionNotFound,
     ConnectionNotUsable,
@@ -46,6 +47,8 @@ class CollectionOut(BaseModel):
     created_at: str
     updated_at: str
     processing: dict[str, Any] = Field(default_factory=dict)
+    #: Mặc định hỏi đáp của bộ.
+    ask: dict[str, Any] = Field(default_factory=dict)
     #: Cả hai kết nối còn dùng được không. False nghĩa là cần chọn lại mô hình.
     is_ready: bool = True
     #: Vì sao chưa dùng được, nếu is_ready là False.
@@ -66,14 +69,16 @@ class CreateCollectionRequest(BaseModel):
     vlm_connection_id: str = Field(min_length=1)
     llm_connection_id: str = Field(min_length=1)
     description: str = ""
-    processing: dict[str, Any] = Field(default_factory=dict)
+    processing: ProcessingOverrides = Field(default_factory=ProcessingOverrides)
+    ask: AskOverrides = Field(default_factory=AskOverrides)
 
 
 class UpdateCollectionRequest(BaseModel):
     vlm_connection_id: Optional[str] = None
     llm_connection_id: Optional[str] = None
     description: Optional[str] = None
-    processing: Optional[dict[str, Any]] = None
+    processing: Optional[ProcessingOverrides] = None
+    ask: Optional[AskOverrides] = None
 
 
 def _to_out(config) -> CollectionOut:
@@ -98,6 +103,7 @@ def _to_out(config) -> CollectionOut:
         created_at=config.created_at,
         updated_at=config.updated_at,
         processing=config.processing,
+        ask=config.ask,
         is_ready=blocked is None,
         blocked_reason=blocked,
     )
@@ -148,7 +154,8 @@ async def create_new_collection(request: CreateCollectionRequest) -> CollectionO
             vlm_connection_id=request.vlm_connection_id,
             llm_connection_id=request.llm_connection_id,
             description=request.description,
-            processing=request.processing,
+            processing=request.processing.model_dump(exclude_none=True),
+            ask=request.ask.model_dump(exclude_none=True),
         )
     except InvalidCollectionName as e:
         raise api_error(422, INVALID_NAME, str(e)) from e
@@ -193,7 +200,9 @@ async def update_collection(name: str, request: UpdateCollectionRequest) -> Coll
     if request.description is not None:
         config.description = request.description.strip()
     if request.processing is not None:
-        config.processing = request.processing
+        config.processing = request.processing.model_dump(exclude_none=True)
+    if request.ask is not None:
+        config.ask = request.ask.model_dump(exclude_none=True)
 
     return _to_out(save_config(config))
 

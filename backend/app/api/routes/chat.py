@@ -20,7 +20,7 @@ async def ask(request: AskRequest) -> AskResponse:
     VLM chạy phía backend nên API key không đi ra trình duyệt.
     """
     logger.info(
-        "Ask | collection=%s query=%r top_k=%d rewrite=%s",
+        "Ask | collection=%s query=%r top_k=%s rewrite=%s",
         request.user_id,
         request.query,
         request.top_k,

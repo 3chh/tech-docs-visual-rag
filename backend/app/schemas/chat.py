@@ -8,12 +8,16 @@ from .search import SearchResult
 
 
 class AskRequest(BaseModel):
+    """Trường None nghĩa là "client không nói gì" — lúc đó lấy mặc định của
+    bộ tài liệu, rồi mới đến mặc định của server. Nếu đặt mặc định cứng ở đây
+    thì cấu hình bộ không bao giờ có cơ hội áp."""
+
     query: str = Field(min_length=1)
     user_id: str = "default"
-    top_k: int = Field(default=5, ge=1, le=20)
-    system_prompt: str = ""
+    top_k: Optional[int] = Field(default=None, ge=1, le=20)
+    system_prompt: Optional[str] = None
     include_base64: bool = True
-    use_toc_rewrite: bool = True
+    use_toc_rewrite: Optional[bool] = None
     # Số ảnh mục lục cho VLM xem khi chuẩn hoá câu hỏi.
     toc_preview_limit: Optional[int] = Field(default=None, ge=1, le=100)
     vlm_temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)

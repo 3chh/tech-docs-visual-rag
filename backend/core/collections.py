@@ -60,6 +60,9 @@ class CollectionConfig:
     updated_at: str = ""
     #: Tham số xử lý riêng của bộ này, ghi đè mặc định của server.
     processing: dict[str, Any] = field(default_factory=dict)
+    #: Mặc định hỏi đáp của bộ (top_k, system_prompt...). Client truyền gì
+    #: thì cái đó thắng; để trống thì dùng mặc định của server.
+    ask: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -70,6 +73,7 @@ class CollectionConfig:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "processing": self.processing,
+            "ask": self.ask,
         }
 
     @classmethod
@@ -82,6 +86,7 @@ class CollectionConfig:
             created_at=data.get("created_at", ""),
             updated_at=data.get("updated_at", ""),
             processing=data.get("processing", {}),
+            ask=data.get("ask", {}),
         )
 
 
@@ -141,6 +146,7 @@ def create_collection(
     llm_connection_id: str,
     description: str = "",
     processing: dict[str, Any] | None = None,
+    ask: dict[str, Any] | None = None,
 ) -> CollectionConfig:
     name = validate_name(name)
 
@@ -154,6 +160,7 @@ def create_collection(
             vlm_connection_id=vlm_connection_id,
             llm_connection_id=llm_connection_id,
             processing=processing or {},
+            ask=ask or {},
         )
     )
 
