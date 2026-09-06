@@ -26,6 +26,149 @@ interface PdfViewerProps {
   className?: string;
 }
 
+const PAGE_GAP = 16; // khoảng cách giữa các trang (px)
+
+interface PdfPageItemProps {
+  pageNumber: number;
+  pdfDoc: any;
+  pageWidth: number;
+  pageHeight: number;
+  scale: number;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+function PdfPageItem({
+  pageNumber,
+  pdfDoc,
+  pageWidth,
+  pageHeight,
+  scale,
+  containerRef,
+}: PdfPageItemProps) {
+  const itemRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const renderTaskRef = useRef<any>(null);
+  const [shouldRender, setShouldRender] = useState(false);
+  const [isRendered, setIsRendered] = useState(false);
+
+  // Quan sát khi trang cuộn vào gần khung nhìn thì mới render canvas
+  useEffect(() => {
+    const el = itemRef.current;
+    const container = containerRef.current;
+    if (!el || !container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setShouldRender(true);
+          }
+        }
+      },
+      {
+        root: container,
+        rootMargin: "600px 0px 600px 0px", // nạp trước trang cách viewport 600px
+      }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [containerRef]);
+
+  // Vẽ nội dung trang PDF lên canvas bằng pdfjs-dist
+  useEffect(() => {
+    if (!shouldRender || !pdfDoc || !canvasRef.current || pageWidth <= 0) return;
+
+    let isCancelled = false;
+
+    if (renderTaskRef.current) {
+      try {
+        renderTaskRef.current.cancel();
+      } catch {
+        // ignore
+      }
+    }
+
+    pdfDoc.getPage(pageNumber).then((page: any) => {
+      if (isCancelled || !canvasRef.current) return;
+
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      const viewport = page.getViewport({ scale });
+      const dpr = window.devicePixelRatio || 1;
+
+      canvas.width = Math.floor(viewport.width * dpr);
+      canvas.height = Math.floor(viewport.height * dpr);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const renderContext = {
+        canvasContext: context,
+        viewport,
+      };
+
+      const task = page.render(renderContext);
+      renderTaskRef.current = task;
+
+      task.promise
+        .then(() => {
+          renderTaskRef.current = null;
+          setIsRendered(true);
+        })
+        .catch((err: any) => {
+          if (err?.name !== "RenderingCancelledException") {
+            console.error(`Page ${pageNumber} render error:`, err);
+          }
+        });
+    });
+
+    return () => {
+      isCancelled = true;
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [shouldRender, pdfDoc, pageNumber, scale, pageWidth]);
+
+  return (
+    <div
+      ref={itemRef}
+      id={`pdf-page-${pageNumber}`}
+      data-page-number={pageNumber}
+      style={{
+        width: `${pageWidth}px`,
+        height: `${pageHeight}px`,
+      }}
+      className="relative rounded-md border bg-card shadow-md shrink-0 flex items-center justify-center transition-shadow hover:shadow-lg select-none"
+    >
+      <canvas
+        ref={canvasRef}
+        className={cn(
+          "block select-none pointer-events-none transition-opacity duration-150",
+          isRendered ? "opacity-100" : "opacity-0"
+        )}
+      />
+      {!isRendered && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/10 text-muted-foreground gap-2 pointer-events-none">
+          <Loader2 className="size-5 animate-spin text-emerald-600" />
+          <span className="text-[11px] font-mono">Trang {pageNumber}</span>
+        </div>
+      )}
+      <div className="absolute bottom-2 right-2 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground shadow-xs pointer-events-none backdrop-blur-xs border">
+        {pageNumber}
+      </div>
+    </div>
+  );
+}
+
 export function PdfViewer({
   pdfUrl = "/sample_document.pdf",
   initialPage = 1,
@@ -35,8 +178,6 @@ export function PdfViewer({
 }: PdfViewerProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const renderTaskRef = useRef<any>(null);
 
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(initialPage);
@@ -46,11 +187,156 @@ export function PdfViewer({
   const [jumpPageInput, setJumpPageInput] = useState(String(initialPage));
   const [containerWidth, setContainerWidth] = useState(800);
 
+  // Kích thước chuẩn từ trang đầu tiên
+  const [unscaledWidth, setUnscaledWidth] = useState(595);
+  const [pageAspectRatio, setPageAspectRatio] = useState(1.414);
+
   // Kéo thả chuột để di chuyển xem các phần khi phóng to (drag-to-pan)
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
   const [isPanning, setIsPanning] = useState(false);
+  const isProgrammaticScrollRef = useRef(false);
+  const prevPageHeightRef = useRef(0);
 
+  // Theo dõi chiều rộng container để tính scale Fit-to-Width
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      }
+    });
+
+    observer.observe(containerRef.current);
+    if (containerRef.current.clientWidth > 0) {
+      setContainerWidth(containerRef.current.clientWidth);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Tải tài liệu PDF thật từ URL và lấy kích thước chuẩn của trang
+  useEffect(() => {
+    let isCancelled = false;
+    setIsLoading(true);
+    setError(null);
+
+    const loadingTask = pdfjsLib.getDocument({ url: pdfUrl });
+
+    loadingTask.promise
+      .then(async (doc) => {
+        if (isCancelled) return;
+        setPdfDoc(doc);
+        setTotalPages(doc.numPages);
+        setCurrentPage(Math.min(initialPage, doc.numPages));
+        setJumpPageInput(String(Math.min(initialPage, doc.numPages)));
+
+        // Lấy kích thước trang 1 để tính tỷ lệ chính xác
+        try {
+          const page1 = await doc.getPage(1);
+          const vp = page1.getViewport({ scale: 1.0 });
+          if (!isCancelled) {
+            setUnscaledWidth(vp.width);
+            setPageAspectRatio(vp.height / vp.width);
+          }
+        } catch (e) {
+          console.warn("Could not inspect page 1 viewport:", e);
+        }
+
+        setIsLoading(false);
+        onPageChange?.(Math.min(initialPage, doc.numPages), doc.numPages);
+      })
+      .catch((err) => {
+        if (isCancelled) return;
+        console.error("PDF load error:", err);
+        setError(err instanceof Error ? err.message : "Không nạp được tệp PDF");
+        setIsLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+      loadingTask.destroy();
+    };
+  }, [pdfUrl]);
+
+  // Tính toán kích thước trang hiển thị
+  const horizontalPadding = 48;
+  const availableWidth = Math.max(containerWidth - horizontalPadding, 320);
+  const fitWidthScale = unscaledWidth > 0 ? availableWidth / unscaledWidth : 1;
+  const effectiveScale = fitWidthScale * (zoom / 100);
+  const pageWidth = Math.floor(unscaledWidth * effectiveScale);
+  const pageHeight = Math.floor(unscaledWidth * pageAspectRatio * effectiveScale);
+
+  // Giữ nguyên vị trí cuộn tương đối khi người dùng zoom in / zoom out
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || prevPageHeightRef.current <= 0 || pageHeight <= 0) {
+      prevPageHeightRef.current = pageHeight;
+      return;
+    }
+    if (prevPageHeightRef.current !== pageHeight) {
+      const ratio = pageHeight / prevPageHeightRef.current;
+      container.scrollTop = container.scrollTop * ratio;
+      prevPageHeightRef.current = pageHeight;
+    }
+  }, [pageHeight]);
+
+  // Theo dõi sự kiện cuộn chuột để cập nhật số trang đang xem
+  const handleScroll = () => {
+    if (isProgrammaticScrollRef.current) return;
+    const container = containerRef.current;
+    if (!container || pageHeight <= 0) return;
+
+    const scrollTop = container.scrollTop;
+    const pageStride = pageHeight + PAGE_GAP;
+    const viewportMid = scrollTop + container.clientHeight / 2;
+    const calcPage = Math.min(
+      Math.max(1, Math.floor(viewportMid / pageStride) + 1),
+      totalPages
+    );
+
+    if (calcPage !== currentPage) {
+      setCurrentPage(calcPage);
+      setJumpPageInput(String(calcPage));
+      onPageChange?.(calcPage, totalPages);
+    }
+  };
+
+  // Cuộn tới một trang cụ thể
+  function scrollToPage(targetPage: number) {
+    const container = containerRef.current;
+    if (!container || pageHeight <= 0) return;
+    const clampedPage = Math.min(Math.max(1, targetPage), totalPages);
+    const pageStride = pageHeight + PAGE_GAP;
+    const targetTop = (clampedPage - 1) * pageStride;
+
+    isProgrammaticScrollRef.current = true;
+    setCurrentPage(clampedPage);
+    setJumpPageInput(String(clampedPage));
+    onPageChange?.(clampedPage, totalPages);
+
+    container.scrollTo({ top: targetTop, behavior: "smooth" });
+
+    setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, 450);
+  }
+
+  // Chuyển trang khi initialPage thay đổi từ bên ngoài (ví dụ nhấp ToC)
+  useEffect(() => {
+    if (
+      initialPage >= 1 &&
+      initialPage <= totalPages &&
+      pageHeight > 0 &&
+      Math.abs(initialPage - currentPage) > 0
+    ) {
+      scrollToPage(initialPage);
+    }
+  }, [initialPage, totalPages, pageHeight]);
+
+  // Kéo thả chuột để di chuyển (Pan) trong tài liệu
   function handleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
@@ -88,161 +374,22 @@ export function PdfViewer({
     window.addEventListener("mouseup", handleGlobalMouseUp);
   }
 
-  // Theo dõi chiều rộng container để tự động tính Fit-to-Width hoàn hảo
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect.width > 0) {
-          setContainerWidth(entry.contentRect.width);
-        }
-      }
-    });
-
-    observer.observe(containerRef.current);
-    if (containerRef.current.clientWidth > 0) {
-      setContainerWidth(containerRef.current.clientWidth);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  // Tải tài liệu PDF thật từ URL
-  useEffect(() => {
-    let isCancelled = false;
-    setIsLoading(true);
-    setError(null);
-
-    const loadingTask = pdfjsLib.getDocument({ url: pdfUrl });
-
-    loadingTask.promise
-      .then((doc) => {
-        if (isCancelled) return;
-        setPdfDoc(doc);
-        setTotalPages(doc.numPages);
-        setCurrentPage(Math.min(initialPage, doc.numPages));
-        setJumpPageInput(String(Math.min(initialPage, doc.numPages)));
-        setIsLoading(false);
-        onPageChange?.(Math.min(initialPage, doc.numPages), doc.numPages);
-      })
-      .catch((err) => {
-        if (isCancelled) return;
-        console.error("PDF load error:", err);
-        setError(err instanceof Error ? err.message : "Không nạp được tệp PDF");
-        setIsLoading(false);
-      });
-
-    return () => {
-      isCancelled = true;
-      loadingTask.destroy();
-    };
-  }, [pdfUrl]);
-
-  // Cập nhật trang khi initialPage đổi từ ngoài
-  useEffect(() => {
-    if (initialPage >= 1 && initialPage <= totalPages && initialPage !== currentPage) {
-      setCurrentPage(initialPage);
-      setJumpPageInput(String(initialPage));
-    }
-  }, [initialPage, totalPages]);
-
-  // Render trang PDF lên canvas HTML5 với cơ chế Fit-to-Width chính xác
-  useEffect(() => {
-    if (!pdfDoc || !canvasRef.current) return;
-
-    let isCancelled = false;
-
-    // Hủy render task cũ nếu đang vẽ dở
-    if (renderTaskRef.current) {
-      try {
-        renderTaskRef.current.cancel();
-      } catch {
-        // ignore cancel error
-      }
-    }
-
-    pdfDoc.getPage(currentPage).then((page: any) => {
-      if (isCancelled || !canvasRef.current) return;
-
-      const canvas = canvasRef.current;
-      const context = canvas.getContext("2d");
-      if (!context) return;
-
-      // 1. Đo kích thước gốc không scale của trang PDF
-      const unscaledViewport = page.getViewport({ scale: 1.0 });
-
-      // 2. Tính tỷ lệ để trang PDF vừa khít 100% bề rộng container (Fit to Width)
-      const horizontalPadding = 36; // Lề trái phải
-      const availableWidth = Math.max(containerWidth - horizontalPadding, 320);
-      const fitWidthScale = availableWidth / unscaledViewport.width;
-
-      // 3. Tỷ lệ thực tế: 100% zoom tương ứng với đúng 100% Fit trang vào khung nhìn
-      const effectiveScale = fitWidthScale * (zoom / 100);
-
-      const viewport = page.getViewport({ scale: effectiveScale });
-      const dpr = window.devicePixelRatio || 1;
-
-      canvas.width = Math.floor(viewport.width * dpr);
-      canvas.height = Math.floor(viewport.height * dpr);
-      canvas.style.width = `${Math.floor(viewport.width)}px`;
-      canvas.style.height = `${Math.floor(viewport.height)}px`;
-
-      context.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-      };
-
-      const task = page.render(renderContext);
-      renderTaskRef.current = task;
-
-      task.promise
-        .then(() => {
-          renderTaskRef.current = null;
-        })
-        .catch((err: any) => {
-          if (err?.name !== "RenderingCancelledException") {
-            console.error("Page render error:", err);
-          }
-        });
-    });
-
-    return () => {
-      isCancelled = true;
-      if (renderTaskRef.current) {
-        try {
-          renderTaskRef.current.cancel();
-        } catch {
-          // ignore
-        }
-      }
-    };
-  }, [pdfDoc, currentPage, zoom, containerWidth]);
-
   function handlePrev() {
     if (currentPage > 1) {
-      const p = currentPage - 1;
-      setCurrentPage(p);
-      setJumpPageInput(String(p));
-      onPageChange?.(p, totalPages);
+      scrollToPage(currentPage - 1);
     }
   }
 
   function handleNext() {
     if (currentPage < totalPages) {
-      const p = currentPage + 1;
-      setCurrentPage(p);
-      setJumpPageInput(String(p));
-      onPageChange?.(p, totalPages);
+      scrollToPage(currentPage + 1);
     }
   }
 
   function handleJump() {
     const p = parseInt(jumpPageInput, 10);
     if (!isNaN(p) && p >= 1 && p <= totalPages) {
-      setCurrentPage(p);
-      onPageChange?.(p, totalPages);
+      scrollToPage(p);
     } else {
       setJumpPageInput(String(currentPage));
     }
@@ -298,24 +445,25 @@ export function PdfViewer({
         </div>
       </div>
 
-      {/* Main Canvas Scroll Area với hỗ trợ lăn chuột và giữ chuột kéo thả */}
+      {/* Main Canvas Scroll Area: Cuộn dọc liên tục qua toàn bộ các trang + kéo thả pan */}
       <div
         ref={containerRef}
         onMouseDown={handleMouseDown}
+        onScroll={handleScroll}
         className={cn(
-          "flex-1 min-h-0 overflow-auto p-4 flex flex-col items-center justify-start select-none",
-          isPanning ? "cursor-grabbing" : "cursor-grab",
+          "flex-1 min-h-0 overflow-auto p-4 select-none",
+          isPanning ? "cursor-grabbing" : "cursor-grab"
         )}
       >
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-24 gap-2">
             <Loader2 className="size-7 animate-spin text-emerald-600" />
-            <p className="text-xs text-muted-foreground">Đang tải và dựng file PDF thật...</p>
+            <p className="text-xs text-muted-foreground">Đang nạp tài liệu PDF...</p>
           </div>
         )}
 
         {error && (
-          <div className="flex flex-col items-center justify-center py-20 gap-2 text-destructive max-w-sm text-center">
+          <div className="flex flex-col items-center justify-center py-20 gap-2 text-destructive max-w-sm text-center mx-auto">
             <AlertCircle className="size-6" />
             <p className="text-xs font-semibold">Không thể nạp tệp PDF</p>
             <p className="text-[11px] text-muted-foreground">{error}</p>
@@ -323,8 +471,24 @@ export function PdfViewer({
         )}
 
         {!isLoading && !error && (
-          <div className="rounded-md border bg-card shadow-md overflow-hidden transition-transform duration-150 m-auto">
-            <canvas ref={canvasRef} className="block select-none pointer-events-none" />
+          <div
+            className="flex flex-col items-center mx-auto pb-16"
+            style={{
+              width: pageWidth > availableWidth ? `${pageWidth}px` : "100%",
+              gap: `${PAGE_GAP}px`,
+            }}
+          >
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <PdfPageItem
+                key={pageNum}
+                pageNumber={pageNum}
+                pdfDoc={pdfDoc}
+                pageWidth={pageWidth}
+                pageHeight={pageHeight}
+                scale={effectiveScale}
+                containerRef={containerRef}
+              />
+            ))}
           </div>
         )}
       </div>

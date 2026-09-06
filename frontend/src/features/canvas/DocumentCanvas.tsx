@@ -436,18 +436,26 @@ export function DocumentCanvas({
               )}
 
               {!isLoadingSection && source && (
-                <div className="flex flex-col items-center space-y-5 pb-12">
-                  {/* Image View with Zoom transform */}
+                <div
+                  className="flex flex-col items-center space-y-5 pb-16 mx-auto"
+                  style={{
+                    width: zoom > 100 ? `${zoom}%` : "100%",
+                    minWidth: "min-content",
+                  }}
+                >
+                  {/* Image View with Zoom layout scaling */}
                   <div
-                    className="transition-transform duration-150 ease-out origin-top"
-                    style={{ transform: `scale(${zoom / 100})` }}
+                    className="transition-all duration-150 ease-out flex justify-center w-full"
+                    style={{
+                      maxWidth: zoom <= 100 ? "800px" : `${Math.round(800 * (zoom / 100))}px`,
+                    }}
                   >
                     {source.image_base64 ? (
-                      <div className="overflow-hidden rounded-lg border bg-card shadow-lg">
+                      <div className="overflow-hidden rounded-lg border bg-card shadow-lg w-full">
                         <img
                           src={source.image_base64}
                           alt={source.section_title || "Ảnh tài liệu"}
-                          className="block max-w-full select-none pointer-events-none"
+                          className="block w-full h-auto select-none pointer-events-none"
                         />
                       </div>
                     ) : (
