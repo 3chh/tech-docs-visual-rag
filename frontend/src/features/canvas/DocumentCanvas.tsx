@@ -15,7 +15,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PageBadge, PageBadgeList } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,49 @@ export function DocumentCanvas({
   const [viewMode, setViewMode] = useState<"slice" | "pdf">(source ? "slice" : "pdf");
   const [pdfTargetPage, setPdfTargetPage] = useState<number>(1);
 
+  // Kéo thả chuột để di chuyển xem các phần khi zoom ảnh
+  const sliceContainerRef = useRef<HTMLDivElement | null>(null);
+  const isSliceDraggingRef = useRef(false);
+  const sliceDragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+  const [isSlicePanning, setIsSlicePanning] = useState(false);
+
+  function handleSliceMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button") || target.closest("input") || target.closest("a")) return;
+
+    const container = sliceContainerRef.current;
+    if (!container) return;
+
+    isSliceDraggingRef.current = true;
+    setIsSlicePanning(true);
+    sliceDragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+    };
+
+    const handleGlobalMouseMove = (moveEvent: MouseEvent) => {
+      if (!isSliceDraggingRef.current || !sliceContainerRef.current) return;
+      moveEvent.preventDefault();
+      const dx = moveEvent.clientX - sliceDragStartRef.current.x;
+      const dy = moveEvent.clientY - sliceDragStartRef.current.y;
+      sliceContainerRef.current.scrollLeft = sliceDragStartRef.current.scrollLeft - dx;
+      sliceContainerRef.current.scrollTop = sliceDragStartRef.current.scrollTop - dy;
+    };
+
+    const handleGlobalMouseUp = () => {
+      isSliceDraggingRef.current = false;
+      setIsSlicePanning(false);
+      window.removeEventListener("mousemove", handleGlobalMouseMove);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleGlobalMouseMove);
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+  }
+
   useEffect(() => {
     if (source) {
       setViewMode("slice");
@@ -66,8 +109,6 @@ export function DocumentCanvas({
   }, [source]);
 
   const books = tocData?.books ?? [];
-  const fileName =
-    typeof source?.metadata?.file_name === "string" ? source.metadata.file_name : null;
 
   function toggleBook(index: number) {
     setOpenBooks((prev) => {
@@ -127,15 +168,15 @@ export function DocumentCanvas({
 
           <div className="h-4 w-px bg-border shrink-0" />
 
-          {/* Mode Switcher: Ảnh cắt lát vs PDF Gốc */}
-          <div className="flex items-center rounded-md border bg-muted/40 p-0.5 text-xs">
+          {/* Nút switch 2 mode chuyển đổi màu xanh: Trích dẫn vs Tài liệu gốc */}
+          <div className="flex items-center rounded-lg bg-muted/60 p-0.5 border border-border/70 text-xs shadow-2xs">
             <button
               type="button"
               onClick={() => setViewMode("slice")}
               className={cn(
-                "rounded px-2 py-0.5 text-[11px] font-medium transition-all",
+                "rounded-md px-3 py-1 text-xs font-medium transition-all duration-200 cursor-pointer select-none",
                 viewMode === "slice"
-                  ? "bg-background text-emerald-700 dark:text-emerald-300 shadow-2xs font-semibold"
+                  ? "bg-emerald-600 text-white font-semibold shadow-xs"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -148,20 +189,14 @@ export function DocumentCanvas({
                 if (firstPageNum > 0) setPdfTargetPage(firstPageNum);
               }}
               className={cn(
-                "rounded px-2 py-0.5 text-[11px] font-medium transition-all",
+                "rounded-md px-3 py-1 text-xs font-medium transition-all duration-200 cursor-pointer select-none",
                 viewMode === "pdf"
-                  ? "bg-background text-emerald-700 dark:text-emerald-300 shadow-2xs font-semibold"
+                  ? "bg-emerald-600 text-white font-semibold shadow-xs"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               {t("view_mode_pdf")}
             </button>
-          </div>
-
-          <div className="min-w-0 flex-1 pl-1">
-            <h3 className="truncate text-xs font-semibold text-foreground">
-              {source?.section_title || fileName || t("canvas_title")}
-            </h3>
           </div>
         </div>
 
@@ -360,9 +395,16 @@ export function DocumentCanvas({
             />
           )}
 
-          {/* MODE 2: Trình đọc Cắt lát Visual RAG */}
+          {/* MODE 2: Trình đọc Cắt lát (Trích dẫn) */}
           {viewMode === "slice" && (
-            <div className="h-full overflow-y-auto bg-muted/10 p-4">
+            <div
+              ref={sliceContainerRef}
+              onMouseDown={handleSliceMouseDown}
+              className={cn(
+                "h-full overflow-auto bg-muted/10 p-4 select-none",
+                isSlicePanning ? "cursor-grabbing" : "cursor-grab",
+              )}
+            >
               {isLoadingSection && (
                 <div className="flex flex-col items-center justify-center py-20">
                   <Skeleton className="h-[380px] w-[500px] rounded-lg" />
@@ -405,7 +447,7 @@ export function DocumentCanvas({
                         <img
                           src={source.image_base64}
                           alt={source.section_title || "Ảnh tài liệu"}
-                          className="block max-w-full select-none"
+                          className="block max-w-full select-none pointer-events-none"
                         />
                       </div>
                     ) : (

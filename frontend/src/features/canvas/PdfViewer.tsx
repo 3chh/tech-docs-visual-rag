@@ -46,6 +46,48 @@ export function PdfViewer({
   const [jumpPageInput, setJumpPageInput] = useState(String(initialPage));
   const [containerWidth, setContainerWidth] = useState(800);
 
+  // Kéo thả chuột để di chuyển xem các phần khi phóng to (drag-to-pan)
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+
+  function handleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button") || target.closest("input")) return;
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    isDraggingRef.current = true;
+    setIsPanning(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: container.scrollLeft,
+      scrollTop: container.scrollTop,
+    };
+
+    const handleGlobalMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingRef.current || !containerRef.current) return;
+      moveEvent.preventDefault();
+      const dx = moveEvent.clientX - dragStartRef.current.x;
+      const dy = moveEvent.clientY - dragStartRef.current.y;
+      containerRef.current.scrollLeft = dragStartRef.current.scrollLeft - dx;
+      containerRef.current.scrollTop = dragStartRef.current.scrollTop - dy;
+    };
+
+    const handleGlobalMouseUp = () => {
+      isDraggingRef.current = false;
+      setIsPanning(false);
+      window.removeEventListener("mousemove", handleGlobalMouseMove);
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleGlobalMouseMove);
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+  }
+
   // Theo dõi chiều rộng container để tự động tính Fit-to-Width hoàn hảo
   useEffect(() => {
     if (!containerRef.current) return;
@@ -212,11 +254,8 @@ export function PdfViewer({
       <div className="flex h-10 shrink-0 items-center justify-between border-b bg-card/70 px-4 py-1.5 text-xs select-none">
         <div className="flex items-center gap-2 text-muted-foreground font-medium min-w-0">
           <FileText className="size-3.5 text-emerald-600 shrink-0" />
-          <span className="font-mono text-[11px] truncate max-w-[220px]">
+          <span className="font-mono text-[11px] truncate max-w-[280px]">
             {pdfUrl.split("/").pop()}
-          </span>
-          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded font-medium">
-            Fit 100%
           </span>
         </div>
 
@@ -259,10 +298,14 @@ export function PdfViewer({
         </div>
       </div>
 
-      {/* Main Canvas Scroll Area */}
+      {/* Main Canvas Scroll Area với hỗ trợ lăn chuột và giữ chuột kéo thả */}
       <div
         ref={containerRef}
-        className="flex-1 min-h-0 overflow-auto p-4 flex flex-col items-center justify-start"
+        onMouseDown={handleMouseDown}
+        className={cn(
+          "flex-1 min-h-0 overflow-auto p-4 flex flex-col items-center justify-start select-none",
+          isPanning ? "cursor-grabbing" : "cursor-grab",
+        )}
       >
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-24 gap-2">
@@ -280,8 +323,8 @@ export function PdfViewer({
         )}
 
         {!isLoading && !error && (
-          <div className="rounded-md border bg-card shadow-md overflow-hidden transition-all duration-150 my-auto">
-            <canvas ref={canvasRef} className="block select-none" />
+          <div className="rounded-md border bg-card shadow-md overflow-hidden transition-transform duration-150 m-auto">
+            <canvas ref={canvasRef} className="block select-none pointer-events-none" />
           </div>
         )}
       </div>
