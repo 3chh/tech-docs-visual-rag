@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { DocumentCanvas } from "@/features/canvas";
-import type { AskOverrides } from "@/features/settings/types";
+import type { AskPreferences } from "@/features/settings/types";
 import { api } from "@/lib/api";
 import type { AskTurn, SearchResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ const SAMPLE_QUESTIONS = [
 
 interface AskPanelProps {
   collection: string;
-  options: AskOverrides;
+  options: AskPreferences;
   turns?: AskTurn[];
   onUpdateTurns?: (updater: AskTurn[] | ((prev: AskTurn[]) => AskTurn[])) => void;
   activeSource?: SearchResult | null;

@@ -176,6 +176,7 @@ export default function App() {
                 onCollectionChange={setCollection}
                 onOpenBookInCanvas={handleOpenBookInCanvas}
                 onOpenSectionInCanvas={handleOpenSectionInCanvas}
+                onOpenGeneralSettings={() => setIsSettingsOpen(true)}
               />
             </div>
           )}

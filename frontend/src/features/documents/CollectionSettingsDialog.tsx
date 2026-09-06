@@ -1,425 +1,229 @@
-import {
-  FileCode,
-  FileSliders,
-  Layers,
-  ListTree,
-  RefreshCw,
-  Save,
-  Sliders,
-} from "lucide-react";
+import { AlertTriangle, Check, FileSliders, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  BooleanRow,
-  NumberRow,
-  TextRow,
-} from "@/features/settings/SettingRow";
-import {
-  DEFAULT_COLLECTION_CONFIG,
-  LIMITS,
-  loadCollectionConfig,
-  saveCollectionConfig,
-  type CollectionConfig,
-} from "@/features/settings/types";
-import { useI18n } from "@/lib/i18n";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useCollectionConfig, useUpdateCollection } from "@/hooks/use-api";
+import { ApiError } from "@/lib/api";
+import type { CollectionOut } from "@/lib/types";
 
-interface CollectionSettingsDialogProps {
-  collection: string;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  onSaved?: (config: CollectionConfig) => void;
-  trigger?: React.ReactNode;
-}
+import {
+  countOverrides,
+  EMPTY_DRAFT,
+  type CollectionDraft,
+} from "./collection-config";
+import { CollectionConfigFields } from "./CollectionConfigFields";
+import { ModelPicker } from "./ModelPicker";
 
+/**
+ * Sửa cấu hình của một bộ tài liệu đã tạo.
+ *
+ * Lưu qua `PUT /collections/{name}` nên cả team thấy cùng cấu hình và backend
+ * áp được lúc index. Trước đây phần này ghi vào localStorage, nghĩa là server
+ * không bao giờ biết và cấu hình mất khi đổi máy.
+ */
 export function CollectionSettingsDialog({
   collection,
-  open: controlledOpen,
-  onOpenChange: controlledOnOpenChange,
+  open,
+  onOpenChange,
   onSaved,
-  trigger,
-}: CollectionSettingsDialogProps) {
-  const { t } = useI18n();
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  const isControlled = controlledOpen !== undefined;
-  const isOpen = isControlled ? controlledOpen : uncontrolledOpen;
-  const setIsOpen = isControlled ? controlledOnOpenChange! : setUncontrolledOpen;
+  onOpenGeneralSettings,
+}: {
+  collection: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved?: (config: CollectionOut) => void;
+  onOpenGeneralSettings?: () => void;
+}) {
+  const { data: config, isLoading } = useCollectionConfig(open ? collection : undefined);
+  const update = useUpdateCollection();
 
-  const [activeTab, setActiveTab] = useState("preprocess");
-  const [config, setConfig] = useState<CollectionConfig>(() => loadCollectionConfig(collection));
-  const [savedAlert, setSavedAlert] = useState(false);
+  const [draft, setDraft] = useState<CollectionDraft>(EMPTY_DRAFT);
+  const [description, setDescription] = useState("");
+  const [vlmId, setVlmId] = useState("");
+  const [llmId, setLlmId] = useState("");
 
+  // Nạp lại từ server mỗi lần mở hoặc đổi bộ: server là nguồn sự thật.
   useEffect(() => {
-    if (isOpen) {
-      setConfig(loadCollectionConfig(collection));
-      setSavedAlert(false);
-    }
-  }, [isOpen, collection]);
+    if (!config) return;
+    setDraft({ processing: config.processing, ask: config.ask });
+    setDescription(config.description);
+    setVlmId(config.vlm_connection_id);
+    setLlmId(config.llm_connection_id);
+    update.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config?.name, config?.updated_at, open]);
 
-  function handleSave() {
-    saveCollectionConfig(collection, config);
-    onSaved?.(config);
-    setSavedAlert(true);
-    setTimeout(() => {
-      setSavedAlert(false);
-      setIsOpen(false);
-    }, 700);
-  }
+  const error = update.error instanceof ApiError ? update.error : null;
+  const overrideCount = countOverrides(draft);
 
-  function handleReset() {
-    setConfig(DEFAULT_COLLECTION_CONFIG);
+  function submit() {
+    update.mutate(
+      {
+        name: collection,
+        input: {
+          description,
+          vlm_connection_id: vlmId || undefined,
+          llm_connection_id: llmId || undefined,
+          processing: draft.processing,
+          ask: draft.ask,
+        },
+      },
+      {
+        onSuccess: (saved) => {
+          onSaved?.(saved);
+          onOpenChange(false);
+        },
+      },
+    );
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-
-      <DialogContent className="sm:max-w-[620px] max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
-        <DialogHeader className="px-6 pt-5 pb-3 border-b bg-card/60">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]">
+        <DialogHeader className="border-b bg-card/60 px-6 pt-5 pb-3 text-left">
           <div className="flex items-center gap-2">
             <div className="flex size-7 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600">
-              <FileSliders className="size-4" />
+              <FileSliders className="size-4" aria-hidden />
             </div>
-            <div>
-              <DialogTitle className="text-sm font-semibold">
-                Cấu hình Xử lý & Tra cứu: <span className="font-mono text-emerald-600">{collection}</span>
+            <div className="min-w-0">
+              <DialogTitle className="text-base font-semibold">
+                Cấu hình bộ tài liệu
               </DialogTitle>
+              <DialogDescription className="truncate font-mono text-sm">
+                {collection}
+              </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        {/* Tab Navigation */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <div className="px-6 pt-2 border-b bg-muted/20">
-            <TabsList className="h-9 w-full justify-start bg-transparent p-0 gap-1">
-              <TabsTrigger
-                value="preprocess"
-                className="h-8 gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-2xs rounded-t-md"
-              >
-                <Sliders className="size-3.5" />
-                <span>Tiền xử lý</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="chunking"
-                className="h-8 gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-2xs rounded-t-md"
-              >
-                <Layers className="size-3.5" />
-                <span>Cắt lát</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="ocr"
-                className="h-8 gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-2xs rounded-t-md"
-              >
-                <FileCode className="size-3.5" />
-                <span>OCR & Bố cục</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="toc"
-                className="h-8 gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-2xs rounded-t-md"
-              >
-                <ListTree className="size-3.5" />
-                <span>Mục lục & Tra cứu</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
+        <div className="flex-1 space-y-4 overflow-y-auto p-6">
+          {isLoading ? (
+            <div className="space-y-2" aria-busy="true">
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : !config ? (
+            <div
+              className="rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-3"
+              role="alert"
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle
+                  className="mt-0.5 size-4 shrink-0 text-amber-600"
+                  aria-hidden
+                />
+                <p className="text-sm">
+                  Bộ <span className="font-mono">{collection}</span> chưa được cấu
+                  hình trên server. Tạo lại bộ này để chọn mô hình cho nó — chưa
+                  có cấu hình thì không thêm được tài liệu.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {error && (
+                <div
+                  className="rounded-md border border-destructive/30 bg-destructive/[0.06] p-3"
+                  role="alert"
+                >
+                  <p className="text-sm">{error.message}</p>
+                </div>
+              )}
 
-          {/* Tab 1: Tiền xử lý */}
-          <TabsContent value="preprocess" className="flex-1 overflow-y-auto p-6 space-y-4 m-0">
-            <NumberRow
-              label="Độ phân giải render (DPI)"
-              value={config.preprocess.dpi}
-              min={LIMITS.dpi.min}
-              max={LIMITS.dpi.max}
-              step={10}
-              unit="DPI"
-              tooltip="Độ nét khi chuyển PDF thành ảnh. Cao hơn sẽ rõ chữ nhưng file nặng hơn."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  preprocess: { ...prev.preprocess, dpi: v },
-                }))
-              }
-            />
+              {!config.is_ready && config.blocked_reason && (
+                <div
+                  className="rounded-md border border-destructive/30 bg-destructive/[0.06] p-3"
+                  role="alert"
+                >
+                  <p className="text-sm">{config.blocked_reason}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Chọn lại mô hình bên dưới rồi lưu.
+                  </p>
+                </div>
+              )}
 
-            <BooleanRow
-              label="Tự động tách đôi trang"
-              value={config.preprocess.vertical_split}
-              tooltip="Tự động chia đôi giữa trang khi tài liệu là dạng scan 2 trang trên 1 tờ."
-              onChange={(v: boolean) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  preprocess: { ...prev.preprocess, vertical_split: v },
-                }))
-              }
-            />
+              <div className="space-y-1">
+                <Label htmlFor="col-desc" className="text-sm">
+                  Tên hiển thị
+                </Label>
+                <Input
+                  id="col-desc"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Tiêu chuẩn Xây dựng 2024"
+                  className="h-8 text-sm"
+                />
+              </div>
 
-            <NumberRow
-              label="Lề bù trang quét (Padding)"
-              value={config.preprocess.padding}
-              min={LIMITS.padding.min}
-              max={LIMITS.padding.max}
-              unit="px"
-              tooltip="Khoảng lề bù xung quanh trang trước khi gửi vào mô hình dò chữ."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  preprocess: { ...prev.preprocess, padding: v },
-                }))
-              }
-            />
+              <div className="border-t pt-4">
+                <ModelPicker
+                  vlmId={vlmId}
+                  llmId={llmId}
+                  onVlmChange={setVlmId}
+                  onLlmChange={setLlmId}
+                  onOpenGeneralSettings={
+                    onOpenGeneralSettings &&
+                    (() => {
+                      onOpenChange(false);
+                      onOpenGeneralSettings();
+                    })
+                  }
+                />
+              </div>
 
-            <NumberRow
-              label="Số luồng xử lý song song"
-              value={config.preprocess.thread_count}
-              min={1}
-              max={16}
-              unit="luồng"
-              tooltip="Số worker chuyển đổi trang PDF đồng thời."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  preprocess: { ...prev.preprocess, thread_count: v },
-                }))
-              }
-            />
+              <div className="border-t pt-4">
+                <p className="mb-2 text-sm font-medium">
+                  Tham số xử lý
+                  {overrideCount > 0 && (
+                    <span className="ml-1.5 font-normal text-muted-foreground">
+                      ({overrideCount} đã đổi)
+                    </span>
+                  )}
+                </p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Tham số áp cho tài liệu thêm vào <em>từ giờ</em>. Tài liệu đã
+                  index vẫn giữ tham số lúc index — muốn đổi thì index lại.
+                </p>
+                <CollectionConfigFields draft={draft} onChange={setDraft} />
+              </div>
+            </>
+          )}
+        </div>
 
-            <BooleanRow
-              label="Áp dụng viền bù khi cắt ảnh (Use Cut Padding)"
-              value={config.preprocess.use_cut_padding}
-              tooltip="Giữ lại phần lề nhỏ ngoài vùng trích đoạn để tránh bị cắt sát mép chữ."
-              onChange={(v: boolean) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  preprocess: { ...prev.preprocess, use_cut_padding: v },
-                }))
-              }
-            />
-          </TabsContent>
-
-          {/* Tab 2: Cắt lát (Chunking) */}
-          <TabsContent value="chunking" className="flex-1 overflow-y-auto p-6 space-y-4 m-0">
-            <NumberRow
-              label="Khoảng bù lề viền cắt (Cut Padding)"
-              value={config.chunking.cut_padding}
-              min={LIMITS.chunk_cut_padding.min}
-              max={LIMITS.chunk_cut_padding.max}
-              unit="px"
-              tooltip="Khoảng cách mở rộng viền lát cắt của từng điều khoản."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  chunking: { ...prev.chunking, cut_padding: v },
-                }))
-              }
-            />
-
-            <NumberRow
-              label="Chiều cao mục tối thiểu"
-              value={config.chunking.min_section_height_px}
-              min={LIMITS.min_section_height.min}
-              max={LIMITS.min_section_height.max}
-              unit="px"
-              tooltip="Các mục có chiều cao ảnh nhỏ hơn giá trị này sẽ được gộp vào mục liền kề."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  chunking: { ...prev.chunking, min_section_height_px: v },
-                }))
-              }
-            />
-
-            <BooleanRow
-              label="Tự động loại bỏ số trang Header / Footer"
-              value={config.chunking.remove_page_number}
-              tooltip="Không tính vùng số trang đầu và cuối trang vào các khối cắt lát."
-              onChange={(v: boolean) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  chunking: { ...prev.chunking, remove_page_number: v },
-                }))
-              }
-            />
-
-            <BooleanRow
-              label="Giữ nguyên khối trang (Keep Chunk Pages)"
-              value={config.chunking.keep_chunk_pages}
-              tooltip="Không chia nhỏ ảnh lát cắt qua nhiều trang riêng biệt."
-              onChange={(v: boolean) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  chunking: { ...prev.chunking, keep_chunk_pages: v },
-                }))
-              }
-            />
-          </TabsContent>
-
-          {/* Tab 3: OCR & Bố cục */}
-          <TabsContent value="ocr" className="flex-1 overflow-y-auto p-6 space-y-4 m-0">
-            <NumberRow
-              label="Batch size công thức toán LaTeX"
-              value={config.ocr.formula_batch_size}
-              min={1}
-              max={32}
-              tooltip="Số lượng công thức toán OCR song song mỗi lượt xử lý."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  ocr: { ...prev.ocr, formula_batch_size: v },
-                }))
-              }
-            />
-
-            <NumberRow
-              label="Batch size tiêu đề điều khoản"
-              value={config.ocr.title_batch_size}
-              min={1}
-              max={32}
-              tooltip="Số lượng tiêu đề nhận diện song song."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  ocr: { ...prev.ocr, title_batch_size: v },
-                }))
-              }
-            />
-
-            <NumberRow
-              label="Batch size bảng số & dữ liệu"
-              value={config.ocr.number_batch_size}
-              min={1}
-              max={32}
-              tooltip="Số lượng ô bảng số liệu OCR song song."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  ocr: { ...prev.ocr, number_batch_size: v },
-                }))
-              }
-            />
-
-            <BooleanRow
-              label="Chế độ nạp OCR theo nhu cầu (Lazy Load)"
-              value={config.ocr.lazy_load}
-              tooltip="Chỉ nhận diện OCR chi tiết khi mục được tra cứu hoặc hiển thị."
-              onChange={(v: boolean) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  ocr: { ...prev.ocr, lazy_load: v },
-                }))
-              }
-            />
-          </TabsContent>
-
-          {/* Tab 4: Mục lục & Tra cứu */}
-          <TabsContent value="toc" className="flex-1 overflow-y-auto p-6 space-y-4 m-0">
-            <BooleanRow
-              label="Tự động chuẩn hoá câu hỏi theo Mục lục"
-              value={config.toc.use_toc_rewrite}
-              tooltip="Dùng thuật ngữ trong cây mục lục đã index để viết lại câu hỏi chính xác hơn."
-              onChange={(v: boolean) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  toc: { ...prev.toc, use_toc_rewrite: v },
-                }))
-              }
-            />
-
-            <NumberRow
-              label="Số mục trích dẫn tối đa (Top-K)"
-              value={config.retrieval.top_k}
-              min={LIMITS.top_k.min}
-              max={LIMITS.top_k.max}
-              tooltip="Số lượng ảnh cắt lát liên quan nhất gửi vào VLM để phân tích và trả lời."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  retrieval: { ...prev.retrieval, top_k: v },
-                }))
-              }
-            />
-
-            <TextRow
-              label="Mô hình LLM chuẩn hoá Cây mục lục"
-              value={config.toc.model_name}
-              tooltip="Mô hình ngôn ngữ được gọi để lọc tiêu đề giả và dựng quan hệ cha-con."
-              mono
-              onChange={(v: string) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  toc: { ...prev.toc, model_name: v },
-                }))
-              }
-            />
-
-            <NumberRow
-              label="Nhiệt độ (Temperature) chuẩn hoá ToC"
-              value={config.toc.temperature}
-              min={LIMITS.temperature.min}
-              max={LIMITS.temperature.max}
-              step={0.1}
-              tooltip="Giá trị thấp giúp việc dựng cây mục lục có tính ổn định cao."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  toc: { ...prev.toc, temperature: v },
-                }))
-              }
-            />
-
-            <NumberRow
-              label="Giới hạn xem trước mục lục (Preview Limit)"
-              value={config.toc.preview_limit}
-              min={LIMITS.toc_preview_limit.min}
-              max={LIMITS.toc_preview_limit.max}
-              tooltip="Số lượng mục hiển thị xem trước khi tra cứu thuật ngữ."
-              onChange={(v: number) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  toc: { ...prev.toc, preview_limit: v },
-                }))
-              }
-            />
-          </TabsContent>
-        </Tabs>
-
-        {/* Footer actions */}
-        <DialogFooter className="flex items-center justify-between border-t bg-muted/15 px-6 py-3">
+        <DialogFooter className="border-t bg-muted/15 px-6 py-3">
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size="sm"
-            onClick={handleReset}
-            className="text-xs text-muted-foreground hover:text-foreground gap-1.5"
+            onClick={() => onOpenChange(false)}
           >
-            <RefreshCw className="size-3.5" />
-            <span>{t("reset_settings")}</span>
+            Huỷ
           </Button>
-
-          <div className="flex items-center gap-2">
-            {savedAlert && (
-              <span className="text-xs text-emerald-600 font-medium animate-in fade-in">
-                ✓ Đã lưu cấu hình bộ tài liệu
-              </span>
+          <Button
+            type="button"
+            size="sm"
+            onClick={submit}
+            disabled={!config || update.isPending}
+          >
+            {update.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Check className="size-3.5" aria-hidden />
             )}
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleSave}
-              className="h-8 text-xs gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 font-medium"
-            >
-              <Save className="size-3.5" />
-              <span>{t("save_settings")}</span>
-            </Button>
-          </div>
+            Lưu cấu hình
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

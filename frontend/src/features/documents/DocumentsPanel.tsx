@@ -21,13 +21,11 @@ import { EmptyState, PageBadge, SectionHeading, StatTile } from "@/components/co
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useTableOfContents, useUploadFiles } from "@/hooks/use-api";
 import {
-  configToProcessingOverrides,
-  loadCollectionConfig,
-  pruneEmpty,
-  type CollectionConfig,
-} from "@/features/settings/types";
+  useCollectionConfig,
+  useTableOfContents,
+  useUploadFiles,
+} from "@/hooks/use-api";
 import { useI18n } from "@/lib/i18n";
 import type { TocBook, TocSection, UploadFileMeta, UploadResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -46,11 +44,14 @@ export function DocumentsPanel({
   onCollectionChange,
   onOpenBookInCanvas,
   onOpenSectionInCanvas,
+  onOpenGeneralSettings,
 }: {
   collection: string;
   onCollectionChange?: (col: string) => void;
   onOpenBookInCanvas?: (book: TocBook) => void;
   onOpenSectionInCanvas?: (section: TocSection, book: TocBook) => void;
+  /** Mở Cấu hình chung khi bộ chưa có mô hình dùng được. */
+  onOpenGeneralSettings?: () => void;
 }) {
   const toc = useTableOfContents(collection);
   const upload = useUploadFiles();
@@ -64,10 +65,8 @@ export function DocumentsPanel({
   const [expandedBooks, setExpandedBooks] = useState<Set<number>>(new Set([0]));
   const [bookFilters, setBookFilters] = useState<Record<number, string>>({});
 
-  // Cấu hình bộ tài liệu
-  const [collectionConfig, setCollectionConfig] = useState<CollectionConfig>(() =>
-    loadCollectionConfig(collection),
-  );
+  // Cấu hình bộ tài liệu — server là nguồn sự thật, không phải localStorage.
+  const collectionConfig = useCollectionConfig(collection);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
@@ -82,6 +81,12 @@ export function DocumentsPanel({
   );
 
   const isBusy = upload.isPending;
+
+  // Bộ chưa cấu hình mô hình thì backend trả 409 lúc upload. Chặn ngay ở đây
+  // thay vì để người dùng chọn file, bấm gửi rồi mới nhận lỗi.
+  const isConfigured = Boolean(collectionConfig.data);
+  const isReady = collectionConfig.data?.is_ready ?? false;
+  const canUpload = !collectionConfig.isLoading && isConfigured && isReady;
 
   function toggleBookOutline(bookIndex: number) {
     setExpandedBooks((prev) => {
@@ -100,16 +105,16 @@ export function DocumentsPanel({
   }
 
   function submit() {
-    if (!queue.length) return;
+    if (!queue.length || !canUpload) return;
 
-    const processing = pruneEmpty(configToProcessingOverrides(collectionConfig)) ?? {};
-
+    // CHỈ gửi thứ thuộc riêng từng file. Tham số của bộ do server đọc từ
+    // cấu hình bộ (xem IndexingService.index) — gửi lại ở đây là ghi đè nó.
+    // Để undefined khi người dùng không đặt riêng cho file này.
     const metadata: UploadFileMeta[] = queue.map((item) => ({
       display_name: item.displayName || item.file.name,
       original_name: item.file.name,
-      vertical_split: item.verticalSplit ?? collectionConfig.preprocess.vertical_split,
+      vertical_split: item.verticalSplit,
       max_pages: item.maxPages,
-      ...processing,
     }));
 
     upload.mutate(
@@ -170,7 +175,7 @@ export function DocumentsPanel({
         collection={collection}
         open={isConfigOpen}
         onOpenChange={setIsConfigOpen}
-        onSaved={(newCfg) => setCollectionConfig(newCfg)}
+        onOpenGeneralSettings={onOpenGeneralSettings}
       />
 
       {/* Dialog Tạo bộ tài liệu mới */}
@@ -178,6 +183,7 @@ export function DocumentsPanel({
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
         onCreated={(newColId) => onCollectionChange?.(newColId)}
+        onOpenGeneralSettings={onOpenGeneralSettings}
       />
 
       {/* Thống kê tài liệu */}
@@ -197,8 +203,47 @@ export function DocumentsPanel({
         )
       )}
 
+      {/* Bộ chưa cấu hình: nói rõ phải làm gì, đừng để bấm rồi mới lỗi */}
+      {!collectionConfig.isLoading && !canUpload && (
+        <div
+          className="rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-3"
+          role="alert"
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle
+              className="mt-0.5 size-4 shrink-0 text-amber-600"
+              aria-hidden
+            />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">
+                {isConfigured
+                  ? "Mô hình của bộ này không dùng được"
+                  : "Bộ này chưa được cấu hình"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {collectionConfig.data?.blocked_reason ??
+                  "Phải chọn mô hình cho bộ tài liệu trước khi thêm tài liệu vào."}
+              </p>
+              <div className="mt-2.5 flex gap-1.5">
+                {isConfigured ? (
+                  <Button size="sm" onClick={() => setIsConfigOpen(true)}>
+                    <FileSliders className="size-3.5" aria-hidden />
+                    Chọn lại mô hình
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+                    <FilePlus2 className="size-3.5" aria-hidden />
+                    Tạo bộ tài liệu
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dropzone tải lên */}
-      <UploadDropzone disabled={isBusy} onFiles={addFiles} />
+      <UploadDropzone disabled={isBusy || !canUpload} onFiles={addFiles} />
 
       {rejected.length > 0 && (
         <ul className="space-y-0.5" role="alert">
@@ -246,7 +291,7 @@ export function DocumentsPanel({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={submit} disabled={isBusy}>
+            <Button onClick={submit} disabled={isBusy || !canUpload}>
               {isBusy ? (
                 <>
                   <Loader2 className="animate-spin" aria-hidden />
