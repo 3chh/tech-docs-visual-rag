@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { EmptyState, SectionHeading, StatTile } from "@/components/common";
+import { EmptyState, PageBadge, SectionHeading, StatTile } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -260,8 +260,8 @@ export function DocumentsPanel({
               )}
             </Button>
             {isBusy && (
-              <p className="text-sm text-muted-foreground" role="status">
-                Sách vài trăm trang có thể mất 15-20 phút. Đừng đóng tab.
+              <p className="text-xs text-muted-foreground animate-pulse" role="status">
+                Đang xử lý tài liệu...
               </p>
             )}
           </div>
@@ -290,7 +290,7 @@ export function DocumentsPanel({
             variant="bordered"
             icon={FileStack}
             title="Chưa có tài liệu nào"
-            description="Kéo thả tệp PDF vào vùng phía trên để bắt đầu phân tích và dựng cây mục lục."
+            description="Tải lên tệp PDF để bắt đầu tra cứu và xem mục lục."
           />
         ) : (
           <div className="space-y-3">
@@ -371,7 +371,7 @@ export function DocumentsPanel({
                         <div className="relative flex-1 max-w-sm">
                           <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
                           <Input
-                            placeholder="Lọc điều khoản, công thức trong cuốn này..."
+                            placeholder="Lọc mục lục..."
                             value={filterText}
                             onChange={(e) =>
                               setBookFilters((prev) => ({
@@ -383,7 +383,7 @@ export function DocumentsPanel({
                           />
                         </div>
                         <span className="text-xs text-muted-foreground">
-                          {sections.length} mục hiển thị
+                          {sections.length} mục
                         </span>
                       </div>
 
@@ -424,9 +424,7 @@ export function DocumentsPanel({
                                   )}
 
                                   {sec.page_range && (
-                                    <span className="text-muted-foreground text-[10px]">
-                                      Trang {sec.page_range}
-                                    </span>
+                                    <PageBadge page={sec.page_range} className="text-[10px] py-0 shrink-0" />
                                   )}
 
                                   <Button

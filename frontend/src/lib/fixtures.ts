@@ -27,9 +27,9 @@ export const sourceWithoutFormulas: SearchResult = {
 export const askFixture: AskResponse = {
   query: "Hệ số an toàn cho cột thép lấy theo bảng nào?",
   answer:
-    "Theo mục 5.4.4 (trang -93-), hệ số an toàn cho bộ phận chịu lực nén dọc trục\n" +
+    "Theo mục 5.4.4 (Trang 93), hệ số an toàn cho bộ phận chịu lực nén dọc trục\n" +
     "lấy theo Bảng 5.4.1. Công thức kiểm tra là σc = N/Ag ≤ σcud.\n\n" +
-    "Giá trị σcud phụ thuộc độ mảnh λ = le/r, tra ở Bảng 5.4.2 (trang -94-).",
+    "Giá trị σcud phụ thuộc độ mảnh λ = le/r, tra ở Bảng 5.4.2 (Trang 94).",
   rewritten_query: "軸方向圧縮力を受ける部材の安全率",
   sources: [sourceFixture, sourceWithoutFormulas],
   total_sources: 2,

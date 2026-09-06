@@ -1,6 +1,7 @@
 import { FileWarning, Sigma, X } from "lucide-react";
 
 import {
+  PageBadge,
   PageBadgeList,
   SectionHeading,
   SectionPath,
@@ -84,9 +85,9 @@ export function SourcePanel({
                       {formula.content || "(không đọc được nội dung)"}
                     </p>
                     {formula.page && (
-                      <p className="mt-1 font-mono text-xs text-muted-foreground tabular">
-                        trang {formula.page}
-                      </p>
+                      <div className="mt-1">
+                        <PageBadge page={formula.page} className="text-[10px] py-0" />
+                      </div>
                     )}
                   </li>
                 ))}
@@ -97,9 +98,6 @@ export function SourcePanel({
           {source.chunk_images.length > 0 && (
             <div className="space-y-2">
               <SectionHeading>Trang gốc ({source.chunk_images.length})</SectionHeading>
-              <p className="text-sm text-muted-foreground">
-                Từng trang trước khi ghép, để đối chiếu với bản in.
-              </p>
               <ul className="grid grid-cols-2 gap-2">
                 {source.chunk_images.map((image, i) => (
                   <li key={i}>
@@ -146,9 +144,6 @@ function MergedImage({ source }: { source: SearchResult }) {
         className="w-full rounded-md border bg-white"
         loading="lazy"
       />
-      <figcaption className="text-sm text-muted-foreground">
-        Ảnh ghép của toàn mục, đã bỏ số trang ở chân trang.
-      </figcaption>
     </figure>
   );
 }

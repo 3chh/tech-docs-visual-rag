@@ -69,7 +69,7 @@ export function OutlinePanel({ collection }: { collection: string }) {
             <div>
               <h1 className="text-lg font-semibold tracking-tight">Mục lục</h1>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Cây mục do hệ thống nhận diện từ bố cục trang, sau đó LLM sửa lại phân cấp.
+                Cấu trúc phân cấp và cây mục lục của các tài liệu trong bộ.
               </p>
             </div>
             <Button
@@ -102,7 +102,7 @@ export function OutlinePanel({ collection }: { collection: string }) {
               variant="bordered"
               icon={ListTree}
               title="Chưa có mục lục"
-              description="Mục lục được sinh tự động sau khi đánh chỉ mục tài liệu đầu tiên. Sang khu vực Tài liệu để tải PDF lên."
+              description="Chưa có dữ liệu mục lục cho bộ tài liệu này."
             />
           )}
 

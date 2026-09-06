@@ -2,7 +2,7 @@ import type { TranslationDictionary } from "../types";
 
 export const en: TranslationDictionary = {
   app_name: "Cosmo ChatPDF",
-  app_tagline: "Visual RAG Workspace",
+  app_tagline: "Document & Drawing Workspace",
 
   // Navigation & Tabs
   nav_chat: "Lookup",
@@ -23,24 +23,24 @@ export const en: TranslationDictionary = {
   ask_placeholder: "Ask about equations, parameters, or specifications in the documents...",
   sources_title: "Citations",
   formulas_found: "formulas",
-  rewritten_note: "Standardized query via ToC:",
-  empty_chat_title: "Visual RAG & Grounded Inspection",
-  empty_chat_desc: "Directly extracts original high-resolution page slices, data tables, and mathematical formulas with page citations for verification.",
+  rewritten_note: "Standardized query:",
+  empty_chat_title: "Document Lookup & Verification",
+  empty_chat_desc: "Look up specifications, formulas, and verify with original page citations.",
 
   // Document Canvas
-  canvas_title: "Document Canvas",
+  canvas_title: "Drawings & Documents",
   toc_button: "Table of Contents",
-  search_toc_placeholder: "Filter sections...",
-  no_toc: "No table of contents available for this collection.",
-  no_source_selected: "No document or citation selected",
-  no_source_desc: "Click any citation chip in the chat response or select a section in the Outline tree to inspect.",
+  search_toc_placeholder: "Filter outline...",
+  no_toc: "No table of contents for this collection.",
+  no_source_selected: "No citation selected",
+  no_source_desc: "Select a citation in the chat response to inspect section slice.",
   zoom_in: "Zoom In",
   zoom_out: "Zoom Out",
   reset_zoom: "Reset Zoom (100%)",
   copy_formula: "Copy formula",
   formula_copied: "Copied to clipboard!",
   view_mode_pdf: "Full PDF View",
-  view_mode_slice: "Visual RAG Slice",
+  view_mode_slice: "Section Slice",
   page_counter: "Page",
   prev_page: "Previous Page",
   next_page: "Next Page",
@@ -50,16 +50,16 @@ export const en: TranslationDictionary = {
   documents_title: "Document Management",
   drag_drop_pdf: "Drag & drop PDF files here or browse from computer",
   browse_files: "Select PDF files",
-  processing_btn: "Start Processing & Indexing",
-  in_collection: "Indexed Documents in Collection",
+  processing_btn: "Start Processing",
+  in_collection: "Documents in Collection",
   open_in_canvas: "Open in Canvas",
   total_sections: "sections",
   total_pages: "pages",
 
   // Outline
-  outline_title: "Overall Table of Contents",
+  outline_title: "Table of Contents",
   refresh_btn: "Reload",
-  filter_placeholder: "Filter sections...",
+  filter_placeholder: "Filter outline...",
 
   // Settings
   settings_title: "System & Collection Settings",
@@ -73,29 +73,29 @@ export const en: TranslationDictionary = {
   save_settings: "Save Settings",
 
   // Settings Plain Language Parameters
-  top_k_title: "Maximum Referenced Sections",
-  top_k_plain_desc: "The number of most relevant page slices sent to AI for answering.",
-  top_k_tooltip: "Higher values provide more comprehensive answers but take longer for visual inference.",
+  top_k_title: "Maximum Citations",
+  top_k_plain_desc: "Maximum number of referenced sections per answer.",
+  top_k_tooltip: "Higher values provide more detail but take longer to process.",
 
-  toc_rewrite_title: "Query Rewrite via ToC Terms",
-  toc_rewrite_plain_desc: "Automatically adapts user query to match technical terminology in the document index.",
-  toc_rewrite_tooltip: "Helps locate accurate formulas and tables even if you ask informal questions.",
+  toc_rewrite_title: "Query Standardization",
+  toc_rewrite_plain_desc: "Automatically adapts query terminology to match table of contents.",
+  toc_rewrite_tooltip: "Helps locate accurate formulas and tables.",
 
-  vlm_temp_title: "Visual Model Temperature",
-  vlm_temp_plain_desc: "Level of reasoning creativity when AI reads drawing and equation images.",
-  vlm_temp_tooltip: "Recommended at 0 for engineering standards to guarantee exact numerical outputs.",
+  vlm_temp_title: "VLM Temperature",
+  vlm_temp_plain_desc: "Strictness level when extracting values and formulas.",
+  vlm_temp_tooltip: "Recommended at 0 for exact numerical outputs.",
 
-  dpi_title: "PDF Scanning Resolution (DPI)",
-  dpi_plain_desc: "Resolution used when converting PDF vector pages into raster images for OCR.",
-  dpi_tooltip: "Higher DPI (e.g. 300) improves reading of tiny subscripts and diagrams but requires more memory.",
+  dpi_title: "Scanning Resolution (DPI)",
+  dpi_plain_desc: "Image resolution when rendering PDF pages.",
+  dpi_tooltip: "Higher DPI improves clarity of formulas and fine print.",
 
-  split_title: "Automatic Two-Page Book Splitting",
-  split_plain_desc: "Detects side-by-side scanned book spreads and splits them vertically into two pages.",
-  split_tooltip: "Ideal for scanned standard books, textbooks, or landscape double-page scans.",
+  split_title: "Split Two-Page Scans",
+  split_plain_desc: "Automatically splits two-page spreads into separate pages.",
+  split_tooltip: "Useful for books scanned with two pages per sheet.",
 
-  padding_title: "Section Slice Margin (Padding)",
-  padding_plain_desc: "Extra border margin added around extracted sections to avoid clipping formula edges.",
-  padding_tooltip: "In pixels (20-60px). Ensures complete visual context surrounding tables and headers.",
+  padding_title: "Section Margin (Padding)",
+  padding_plain_desc: "Extra margin around extracted section slices.",
+  padding_tooltip: "Ensures formulas and table borders are not clipped.",
 
   // User & Auth
   account: "Account",

@@ -366,16 +366,16 @@ class DemoHandler(SimpleHTTPRequestHandler):
             }
 
             answer_text = (
-                f"Dựa trên tài liệu quy chuẩn kỹ thuật đối soát, đối với câu hỏi **\"{user_query}\"**:\n\n"
+                f"Đối với câu hỏi **\"{user_query}\"**:\n\n"
                 "1. **Điều kiện kiểm tra cường độ chịu nén:**\n"
-                "Theo **Mục 5.4.4** (trang `-93-`), ứng suất nén tính toán phải thỏa mãn công thức giới hạn:\n\n"
+                "Theo **Mục 5.4.4** (Trang 93), ứng suất nén tính toán phải thỏa mãn công thức giới hạn:\n\n"
                 "$$\\sigma_c = \\frac{N}{A_g} \\le \\sigma_{cud}$$\n\n"
                 "Trong đó:\n"
                 "- $N$: Lực nén dọc trục tính toán theo tổ hợp tác động cơ bản.\n"
                 "- $A_g$: Diện tích mặt cắt ngang nguyên của thanh thép.\n"
                 "- $\\sigma_{cud}$: Ứng suất nén giới hạn danh định, phụ thuộc vào độ mảnh $\\lambda = l_e / r$.\n\n"
                 "2. **Hệ số uốn dọc và ổn định cục bộ:**\n"
-                "Được tra theo **Bảng 5.4.1** (trang `-94-`) căn cứ vào cấp độ dẻo và bề dày bản cánh/bản bụng."
+                "Được tra theo **Bảng 5.4.1** (Trang 94) căn cứ vào cấp độ dẻo và bề dày bản cánh/bản bụng."
             )
 
             response = {

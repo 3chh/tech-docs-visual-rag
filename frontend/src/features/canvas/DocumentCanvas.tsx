@@ -15,9 +15,9 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { PageBadgeList } from "@/components/common";
+import { PageBadge, PageBadgeList } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -56,8 +56,14 @@ export function DocumentCanvas({
   const [copiedFormula, setCopiedFormula] = useState<string | null>(null);
   const [openBooks, setOpenBooks] = useState<Set<number>>(new Set([0]));
   const [isLoadingSection, setIsLoadingSection] = useState(false);
-  const [viewMode, setViewMode] = useState<"slice" | "pdf">("slice");
+  const [viewMode, setViewMode] = useState<"slice" | "pdf">(source ? "slice" : "pdf");
   const [pdfTargetPage, setPdfTargetPage] = useState<number>(1);
+
+  useEffect(() => {
+    if (source) {
+      setViewMode("slice");
+    }
+  }, [source]);
 
   const books = tocData?.books ?? [];
   const fileName =
@@ -225,7 +231,7 @@ export function DocumentCanvas({
       {source && viewMode === "slice" && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/15 px-3 py-1.5 text-xs">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-muted-foreground text-[11px]">Trang đối soát:</span>
+            <span className="font-medium text-muted-foreground text-[11px]">Trang:</span>
             <PageBadgeList pages={source.section_pages} max={6} />
           </div>
           {source.formulas && source.formulas.length > 0 && (
@@ -371,8 +377,8 @@ export function DocumentCanvas({
                   <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 mb-3">
                     <BookOpen className="size-6" />
                   </div>
-                  <h4 className="text-xs font-semibold">{t("no_source_selected")}</h4>
-                  <p className="mt-1 max-w-xs text-[11px] text-muted-foreground">
+                  <h4 className="text-xs font-semibold text-foreground">{t("no_source_selected")}</h4>
+                  <p className="mt-1 max-w-xs text-xs text-muted-foreground">
                     {t("no_source_desc")}
                   </p>
                   <Button
@@ -382,7 +388,7 @@ export function DocumentCanvas({
                     onClick={() => setViewMode("pdf")}
                   >
                     <FileText className="size-3.5" />
-                    <span>Mở xem tài liệu PDF thật</span>
+                    <span>Xem toàn bộ PDF</span>
                   </Button>
                 </div>
               )}
@@ -405,10 +411,16 @@ export function DocumentCanvas({
                     ) : (
                       <div className="flex h-64 w-[480px] flex-col items-center justify-center rounded-lg border border-dashed bg-card p-6 text-center text-muted-foreground">
                         <FileWarning className="size-7 text-amber-500 mb-2" />
-                        <p className="text-xs font-medium">Ảnh cắt lát mục chưa được nạp</p>
-                        <p className="mt-1 text-[11px]">
-                          Bấm nút "Xem PDF gốc" phía trên để đọc tài liệu gốc.
-                        </p>
+                        <p className="text-xs font-medium">Chưa có ảnh trích đoạn cho mục này</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2.5 h-7 text-xs gap-1.5"
+                          onClick={() => setViewMode("pdf")}
+                        >
+                          <FileText className="size-3.5" />
+                          <span>Mở xem PDF gốc</span>
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -418,7 +430,7 @@ export function DocumentCanvas({
                     <div className="w-full max-w-2xl rounded-lg border bg-card p-3.5 shadow-xs">
                       <div className="flex items-center gap-1.5 border-b pb-2 text-xs font-semibold text-foreground">
                         <Sigma className="size-4 text-emerald-600" />
-                        <span>Công thức nhận diện trong mục ({source.formulas.length})</span>
+                        <span>Công thức trong mục ({source.formulas.length})</span>
                       </div>
                       <div className="divide-y mt-2">
                         {source.formulas.map((f, i) => (
@@ -426,11 +438,9 @@ export function DocumentCanvas({
                             <code className="font-mono text-xs text-emerald-700 dark:text-emerald-300 bg-muted/40 px-2 py-1 rounded flex-1 overflow-x-auto">
                               {f.content}
                             </code>
-                            <div className="flex items-center gap-1 shrink-0">
+                            <div className="flex items-center gap-1.5 shrink-0">
                               {f.page && (
-                                <span className="text-[10px] text-muted-foreground font-mono">
-                                  Trang {f.page}
-                                </span>
+                                <PageBadge page={f.page} className="text-[10px] py-0" />
                               )}
                               <Button
                                 variant="ghost"

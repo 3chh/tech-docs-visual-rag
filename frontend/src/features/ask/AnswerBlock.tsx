@@ -6,6 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { AskTurn, SearchResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+import { useI18n } from "@/lib/i18n";
+
 export function AnswerBlock({
   turn,
   activeSourcePath,
@@ -15,6 +17,8 @@ export function AnswerBlock({
   activeSourcePath?: string;
   onPickSource: (source: SearchResult) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <article className="space-y-3.5">
       {/* Câu hỏi căn phải để phân biệt với câu trả lời */}
@@ -35,7 +39,7 @@ export function AnswerBlock({
 
           {turn.sources.length > 0 && (
             <div className="space-y-2">
-              <SectionHeading>Nguồn ({turn.sources.length})</SectionHeading>
+              <SectionHeading>{t("sources_title")} ({turn.sources.length})</SectionHeading>
               <ul className="space-y-1">
                 {turn.sources.map((source, i) => (
                   <li key={source.image_path || i}>
@@ -57,12 +61,13 @@ export function AnswerBlock({
 }
 
 function RewriteNote({ rewritten }: { rewritten: string }) {
+  const { t } = useI18n();
   return (
-    <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
-      <Wand2 className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+    <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+      <Wand2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" aria-hidden />
       <span>
-        Đã tìm theo thuật ngữ trong tài liệu:{" "}
-        <span className="text-foreground">{rewritten}</span>
+        {t("rewritten_note")}{" "}
+        <span className="font-medium text-foreground">{rewritten}</span>
       </span>
     </p>
   );
@@ -125,9 +130,9 @@ function SourceRow({
 function PendingState() {
   return (
     <div className="space-y-2.5" aria-busy="true" aria-label="Đang tra cứu">
-      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Search className="size-3.5 animate-pulse" aria-hidden />
-        Đang tìm mục liên quan rồi đọc ảnh tài liệu...
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Search className="size-3.5 animate-pulse text-emerald-600" aria-hidden />
+        Đang tra cứu tài liệu...
       </p>
       <Skeleton className="h-3.5 w-4/5" />
       <Skeleton className="h-3.5 w-full" />
@@ -142,26 +147,25 @@ function ErrorState({ message }: { message?: string }) {
       role="alert"
       className="rounded-md border border-destructive/30 bg-destructive/[0.04] px-3 py-2.5"
     >
-      <p className="flex items-center gap-1.5 text-[15px] font-medium text-destructive">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-destructive">
         <AlertCircle className="size-4 shrink-0" aria-hidden />
         Không tra cứu được
       </p>
-      {message && <p className="mt-1 pl-5 text-sm text-muted-foreground">{message}</p>}
+      {message && <p className="mt-1 pl-5 text-xs text-muted-foreground">{message}</p>}
     </div>
   );
 }
 
-/** Không tìm thấy mục nào: khác với lỗi, cần gợi ý cách sửa câu hỏi. */
+/** Không tìm thấy mục nào */
 export function NoResultNote() {
   return (
     <div className="rounded-md border border-dashed bg-card/50 px-3 py-2.5">
-      <p className="flex items-center gap-1.5 text-[15px] font-medium">
+      <p className="flex items-center gap-1.5 text-xs font-medium">
         <FileSearch className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        Không tìm thấy mục nào phù hợp
+        Không tìm thấy nội dung phù hợp
       </p>
-      <p className="mt-1 pl-5 text-sm text-muted-foreground">
-        Thử dùng từ ngữ gần với tiêu đề mục trong tài liệu, hoặc kiểm tra bộ tài liệu
-        đã được đánh chỉ mục chưa.
+      <p className="mt-1 pl-5 text-xs text-muted-foreground">
+        Thử thay đổi từ khoá tìm kiếm hoặc kiểm tra lại bộ tài liệu.
       </p>
     </div>
   );
