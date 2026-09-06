@@ -1,158 +1,105 @@
-"""Nhiều nhà cung cấp VLM, chọn được lúc chạy.
+"""Giải kết nối mô hình thành client gọi được.
 
-Người dùng chọn provider trên giao diện; API key luôn nằm ở server, không bao
-giờ đi ra trình duyệt. UI chỉ biết provider nào đã cấu hình key, không biết
-key là gì.
+Khác bản trước: **không còn provider mặc định từ biến môi trường**. Người dùng
+phải tự thêm kết nối trước, và mỗi bộ tài liệu chọn một kết nối cụ thể.
 
-Tất cả provider ở đây đều nói giao thức OpenAI nên chỉ cần một client duy
+Mọi nhà cung cấp ở đây đều nói giao thức OpenAI nên chỉ cần một client duy
 nhất, chỉ khác `base_url` và `api_key`.
 """
 
-import os
-from dataclasses import dataclass, replace
-from typing import Literal
+from dataclasses import dataclass
 
-from .credentials import get_credential_store, mask_key
+from .connections import ModelConnection, get_connection_store
+from .logging import get_logger
 
-ProviderId = Literal["builtin", "openai", "gemini", "custom"]
+logger = get_logger(__name__)
 
-# Endpoint OpenAI-compatible chính thức của từng nhà cung cấp.
-GEMINI_OPENAI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/"
-OPENAI_ENDPOINT = "https://api.openai.com/v1"
+# vLLM tự host thường không bật xác thực nên chấp nhận key rỗng.
+PROVIDERS_WITHOUT_KEY = {"vllm"}
+
+
+class ConnectionNotFound(ValueError):
+    """Kết nối bị xoá hoặc chưa từng tồn tại."""
+
+
+class ConnectionNotUsable(ValueError):
+    """Kết nối có tồn tại nhưng thiếu thông tin để gọi được."""
 
 
 @dataclass(frozen=True)
-class VlmProvider:
-    id: ProviderId
-    label: str
+class ResolvedModel:
+    """Đủ thông tin để tạo client và gọi API."""
+
+    connection_id: str
+    name: str
+    provider: str
     endpoint: str
     model_name: str
-    api_key: str | None
-    description: str
-    needs_gpu: bool
-    # Nguồn của key: "ui" nếu người dùng nhập trên giao diện, "env" nếu từ
-    # biến môi trường. Quyết định người dùng có xoá được key hay không.
-    key_source: str = "env"
+    api_key: str
 
-    @property
-    def is_configured(self) -> bool:
-        """Builtin không cần key; các provider ngoài thì bắt buộc."""
-        if self.id == "builtin":
-            return bool(self.endpoint)
-        return bool(self.api_key)
-
-    @property
-    def masked_key(self) -> str | None:
-        """Bản che để hiển thị. Đây là thứ DUY NHẤT được gửi ra client."""
-        return mask_key(self.api_key)
+    def as_client_kwargs(self) -> dict:
+        return {"base_url": self.endpoint, "api_key": self.api_key}
 
 
-def _env(key: str, default: str | None = None) -> str | None:
-    value = os.environ.get(key)
-    return default if value is None or value == "" else value
+def _validate(connection: ModelConnection, capability: str) -> ResolvedModel:
+    if capability not in connection.capabilities:
+        raise ConnectionNotUsable(
+            f"Kết nối '{connection.name}' không khai báo khả năng '{capability}'. "
+            f"Nó chỉ hỗ trợ: {', '.join(connection.capabilities)}."
+        )
+
+    if not connection.endpoint:
+        raise ConnectionNotUsable(f"Kết nối '{connection.name}' chưa có endpoint.")
+
+    if not connection.model_name:
+        raise ConnectionNotUsable(f"Kết nối '{connection.name}' chưa có tên model.")
+
+    needs_key = connection.provider not in PROVIDERS_WITHOUT_KEY
+    if needs_key and not connection.api_key:
+        raise ConnectionNotUsable(
+            f"Kết nối '{connection.name}' chưa có API key. Vào Cấu hình để nhập."
+        )
+
+    return ResolvedModel(
+        connection_id=connection.id,
+        name=connection.name,
+        provider=connection.provider,
+        endpoint=connection.endpoint,
+        model_name=connection.model_name,
+        # vLLM không kiểm tra key nhưng client OpenAI vẫn đòi một chuỗi.
+        api_key=connection.api_key or "EMPTY",
+    )
 
 
-def _apply_stored_credentials(providers: list[VlmProvider]) -> list[VlmProvider]:
-    """Key người dùng nhập trên UI đè lên key từ biến môi trường.
+def resolve_connection(connection_id: str, capability: str = "vlm") -> ResolvedModel:
+    """Lấy kết nối và kiểm tra nó dùng được cho việc này.
 
-    Nhờ vậy đổi key không cần khởi động lại service.
+    Báo lỗi cụ thể thay vì để lệnh gọi API thất bại với thông báo khó hiểu.
     """
-    store = get_credential_store()
-    result: list[VlmProvider] = []
+    if not connection_id:
+        raise ConnectionNotFound(
+            "Chưa chọn mô hình. Vào Cấu hình để thêm kết nối, rồi chọn cho bộ tài liệu."
+        )
 
-    for provider in providers:
-        stored = store.get(provider.id)
-        if stored is None:
-            result.append(provider)
+    connection = get_connection_store().get(connection_id)
+    if connection is None:
+        raise ConnectionNotFound(
+            f"Kết nối '{connection_id}' không còn tồn tại. Có thể đã bị xoá; "
+            "hãy chọn lại mô hình cho bộ tài liệu."
+        )
+
+    return _validate(connection, capability)
+
+
+def has_usable_connection(capability: str = "vlm") -> bool:
+    """Có ít nhất một kết nối dùng được cho việc này không.
+
+    Dùng để chặn luồng index và tra cứu khi người dùng chưa cấu hình gì.
+    """
+    for connection in get_connection_store().list_by_capability(capability):
+        try:
+            _validate(connection, capability)
+            return True
+        except ConnectionNotUsable:
             continue
-
-        result.append(
-            replace(
-                provider,
-                api_key=stored.api_key,
-                model_name=stored.model_name or provider.model_name,
-                endpoint=stored.endpoint or provider.endpoint,
-                key_source="ui",
-            )
-        )
-
-    return result
-
-
-def list_vlm_providers() -> list[VlmProvider]:
-    """Danh sách provider, gộp key từ env và key người dùng nhập trên UI."""
-    return _apply_stored_credentials(_env_providers())
-
-
-def _env_providers() -> list[VlmProvider]:
-    """Chỉ đọc biến môi trường, chưa gộp key từ UI."""
-    return [
-        VlmProvider(
-            id="builtin",
-            label="Model tự host",
-            endpoint=_env("VLM_ENDPOINT", "http://vllm:8000/v1") or "",
-            model_name=_env("VLM_MODEL_NAME", "OpenGVLab/InternVL3-8B") or "",
-            api_key=_env("OPENAI_API_KEY", "EMPTY"),
-            description=(
-                "vLLM chạy trong stack. Không gửi tài liệu ra ngoài, nhưng cần "
-                "GPU riêng cho model."
-            ),
-            needs_gpu=True,
-        ),
-        VlmProvider(
-            id="openai",
-            label="OpenAI",
-            endpoint=_env("OPENAI_BASE_URL", OPENAI_ENDPOINT) or OPENAI_ENDPOINT,
-            model_name=_env("OPENAI_VLM_MODEL", "gpt-4o") or "gpt-4o",
-            api_key=_env("OPENAI_CLOUD_API_KEY"),
-            description="Không cần GPU cho khâu trả lời. Ảnh tài liệu gửi lên OpenAI.",
-            needs_gpu=False,
-        ),
-        VlmProvider(
-            id="gemini",
-            label="Google Gemini",
-            endpoint=_env("GEMINI_BASE_URL", GEMINI_OPENAI_ENDPOINT) or GEMINI_OPENAI_ENDPOINT,
-            model_name=_env("GEMINI_VLM_MODEL", "gemini-2.0-flash") or "gemini-2.0-flash",
-            api_key=_env("GEMINI_API_KEY"),
-            description="Không cần GPU cho khâu trả lời. Ảnh tài liệu gửi lên Google.",
-            needs_gpu=False,
-        ),
-        VlmProvider(
-            id="custom",
-            label="Endpoint tuỳ chỉnh",
-            endpoint=_env("CUSTOM_VLM_ENDPOINT", "") or "",
-            model_name=_env("CUSTOM_VLM_MODEL", "") or "",
-            api_key=_env("CUSTOM_VLM_API_KEY"),
-            description="Bất kỳ endpoint nào nói giao thức OpenAI và đọc được ảnh.",
-            needs_gpu=False,
-        ),
-    ]
-
-
-def get_vlm_provider(provider_id: str | None = None) -> VlmProvider:
-    """Lấy provider theo id, mặc định lấy DEFAULT_VLM_PROVIDER.
-
-    Nếu provider được chọn chưa cấu hình key thì báo lỗi rõ ràng thay vì để
-    lệnh gọi API thất bại với thông báo khó hiểu.
-    """
-    wanted = provider_id or _env("DEFAULT_VLM_PROVIDER", "builtin")
-    providers = {p.id: p for p in list_vlm_providers()}
-
-    provider = providers.get(wanted)
-    if provider is None:
-        raise ValueError(
-            f"Provider '{wanted}' không tồn tại. Chọn: {', '.join(providers)}"
-        )
-
-    if not provider.is_configured:
-        env_hint = {
-            "openai": "OPENAI_CLOUD_API_KEY",
-            "gemini": "GEMINI_API_KEY",
-            "custom": "CUSTOM_VLM_ENDPOINT và CUSTOM_VLM_API_KEY",
-        }.get(provider.id, "VLM_ENDPOINT")
-        raise ValueError(
-            f"Provider '{provider.label}' chưa cấu hình. Đặt {env_hint} trong .env "
-            "rồi khởi động lại backend."
-        )
-
-    return provider
+    return False

@@ -144,20 +144,9 @@ class Settings(BaseModel):
     paths: PathSettings = Field(default_factory=PathSettings)
     log_level: str = "INFO"
 
-    @model_validator(mode="after")
-    def validate_required_secrets(self) -> "Settings":
-        """Fail-fast: thiếu secret thì lỗi lúc khởi động, không phải lúc gọi API."""
-        missing: list[str] = []
-        if self.vlm.type == "openai" and not self.vlm.api_key:
-            missing.append("OPENAI_API_KEY (VLM_TYPE=openai)")
-        if self.document.llm_validator.type == "gemini" and not self.document.llm_validator.api_key:
-            missing.append("GEMINI_API_KEY (TOC_VALIDATOR_TYPE=gemini)")
-        if missing:
-            raise ValueError(
-                "Thiếu biến môi trường bắt buộc: " + ", ".join(missing) +
-                ". Xem .env.example."
-            )
-        return self
+    # Không còn validate secret ở đây. API key nay do người dùng nhập trên
+    # giao diện và lưu trong kho kết nối (core/connections.py), nên service
+    # phải lên được kể cả khi chưa có key nào.
 
 
 def _env(key: str, default: Any = None) -> Any:

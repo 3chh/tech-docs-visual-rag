@@ -10,7 +10,8 @@ from pathlib import Path
 
 from ...core.config import get_settings
 from ...core.logging import get_logger
-from ...core.providers import VlmProvider, get_vlm_provider
+from ...core.collections import require_config
+from ...core.providers import ResolvedModel, resolve_connection
 from ...prompts.rag_prompts import (
     build_toc_rewrite_prompt,
     rag_prompt,
@@ -37,12 +38,17 @@ def _encode_image(image_path: str) -> str | None:
 
 
 class RagService:
-    def __init__(self, collection: str, provider_id: str | None = None):
+    def __init__(self, collection: str, connection_id: str | None = None):
         self.settings = get_settings()
         self.collection = collection
         self.retrieval = RetrievalService(collection)
-        # Provider chọn lúc gọi; key luôn đọc từ env phía server.
-        self.provider: VlmProvider = get_vlm_provider(provider_id)
+
+        # Mặc định lấy kết nối mà bộ tài liệu này đã chọn lúc tạo. Cho phép
+        # ghi đè để thử model khác mà không phải sửa cấu hình bộ.
+        if connection_id is None:
+            connection_id = require_config(collection).vlm_connection_id
+
+        self.model: ResolvedModel = resolve_connection(connection_id, "vlm")
         self._client = None
 
     @property
@@ -51,10 +57,7 @@ class RagService:
         if self._client is None:
             from openai import OpenAI
 
-            self._client = OpenAI(
-                base_url=self.provider.endpoint,
-                api_key=self.provider.api_key or "EMPTY",
-            )
+            self._client = OpenAI(**self.model.as_client_kwargs())
         return self._client
 
     def _ask_vlm(
@@ -91,7 +94,7 @@ class RagService:
             kwargs["temperature"] = temperature
 
         response = self.client.chat.completions.create(
-            model=self.provider.model_name,
+            model=self.model.model_name,
             messages=messages,
             **kwargs,
         )
@@ -163,8 +166,8 @@ class RagService:
                 "answer": "Không tìm thấy mục nào phù hợp trong bộ tài liệu này.",
                 "rewritten_query": rewritten,
                 "payloads": [],
-                "provider": self.provider.id,
-                "model_name": self.provider.model_name,
+                "connection_id": self.model.connection_id,
+                "model_name": self.model.model_name,
             }
 
         answer = self._ask_vlm(
@@ -174,13 +177,13 @@ class RagService:
             "Đã sinh câu trả lời (%d ký tự) từ %d mục bằng %s",
             len(answer),
             len(image_paths),
-            self.provider.label,
+            self.model.name,
         )
 
         return {
             "answer": answer,
             "rewritten_query": rewritten,
             "payloads": payloads,
-            "provider": self.provider.id,
-            "model_name": self.provider.model_name,
+            "connection_id": self.model.connection_id,
+            "model_name": self.model.model_name,
         }

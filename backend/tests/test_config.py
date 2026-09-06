@@ -67,20 +67,19 @@ def test_colqwen_khong_co_min_width(monkeypatch):
     assert "min_width" not in settings.embedding.manager_kwargs()
 
 
-def test_thieu_gemini_key_thi_bao_loi(monkeypatch):
-    monkeypatch.setenv("TOC_VALIDATOR_TYPE", "gemini")
+def test_khong_can_api_key_o_env(monkeypatch):
+    """Key nay do nguoi dung nhap tren giao dien va luu trong kho ket noi.
+
+    Service phai len duoc ke ca khi chua co key nao, neu khong thi khong ai
+    vao duoc giao dien de nhap key.
+    """
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-
-    with pytest.raises(Exception, match="GEMINI_API_KEY"):
-        reload_settings()
-
-
-def test_thieu_openai_key_thi_bao_loi(monkeypatch):
-    monkeypatch.setenv("VLM_TYPE", "openai")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-    with pytest.raises(Exception, match="OPENAI_API_KEY"):
-        reload_settings()
+    settings = reload_settings()
+
+    assert settings.embedding.type == "longcolqwen"
+    assert settings.database.type == "qdrant-standalone"
 
 
 def test_secret_khong_lay_tu_yaml():

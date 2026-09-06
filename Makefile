@@ -44,9 +44,9 @@ help:
 
 setup:
 	@test -f .env || (cp .env.example .env && \
-		echo "Đã tạo .env — điền GEMINI_API_KEY trước khi chạy")
-	@grep -q '^GEMINI_API_KEY=.\+' .env || \
-		(echo "GEMINI_API_KEY còn trống trong .env" && exit 1)
+		echo "Đã tạo .env — điền CREDENTIALS_SECRET trước khi chạy")
+	@grep -q '^CREDENTIALS_SECRET=.\+' .env || \
+		(echo "CREDENTIALS_SECRET còn trống. Sinh bằng: openssl rand -base64 32" && exit 1)
 
 # Demo không gọi model nào nên không cần key.
 setup-demo:
@@ -65,9 +65,10 @@ deploy-full: setup
 	@$(MAKE) --no-print-directory _after-up KIND="tất cả tự host (24GB VRAM)"
 
 deploy-hybrid: setup
-	@grep -qE '^DEFAULT_VLM_PROVIDER=(openai|gemini|custom)' .env || \
-		(echo "Kiểu hybrid cần DEFAULT_VLM_PROVIDER=gemini (hoặc openai/custom) trong .env" && exit 1)
 	$(C_HYBRID) up -d --build
+	@echo ""
+	@echo "vLLM không chạy ở kiểu này. Vào giao diện > Cấu hình > thêm kết nối"
+	@echo "tới OpenAI hoặc Gemini, rồi tạo bộ tài liệu chọn kết nối đó."
 	@$(MAKE) --no-print-directory _after-up KIND="hybrid, VLM qua API ngoài (16GB VRAM)"
 
 deploy-worker-node: setup

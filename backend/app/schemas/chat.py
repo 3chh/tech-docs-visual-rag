@@ -17,8 +17,9 @@ class AskRequest(BaseModel):
     # Số ảnh mục lục cho VLM xem khi chuẩn hoá câu hỏi.
     toc_preview_limit: Optional[int] = Field(default=None, ge=1, le=100)
     vlm_temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
-    # builtin | openai | gemini | custom. None thì dùng DEFAULT_VLM_PROVIDER.
-    vlm_provider: Optional[str] = None
+    # Ghi đè kết nối mô hình cho riêng lượt này. None thì dùng kết nối mà
+    # bộ tài liệu đã chọn.
+    connection_id: Optional[str] = None
 
 
 class AskResponse(BaseModel):
@@ -29,5 +30,5 @@ class AskResponse(BaseModel):
     sources: list[SearchResult] = Field(default_factory=list)
     total_sources: int = 0
     # Model nào đã trả lời, để người dùng biết câu trả lời đến từ đâu.
-    provider: Optional[str] = None
+    connection_id: Optional[str] = None
     model_name: Optional[str] = None

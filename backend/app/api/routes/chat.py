@@ -25,7 +25,7 @@ async def ask(request: AskRequest) -> AskResponse:
         request.use_toc_rewrite,
     )
     try:
-        service = RagService(request.user_id, provider_id=request.vlm_provider)
+        service = RagService(request.user_id, connection_id=request.connection_id)
         result = service.ask(
             query=request.query,
             top_k=request.top_k,
@@ -47,11 +47,12 @@ async def ask(request: AskRequest) -> AskResponse:
             rewritten_query=result["rewritten_query"],
             sources=sources,
             total_sources=len(sources),
-            provider=result.get("provider"),
+            connection_id=result.get("connection_id"),
             model_name=result.get("model_name"),
         )
     except ValueError as e:
-        # Provider không tồn tại hoặc chưa cấu hình key: lỗi của người gọi.
+        # Bộ chưa cấu hình, kết nối không tồn tại, hoặc kết nối thiếu key:
+        # đều là lỗi của người gọi, không phải lỗi server.
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("Ask thất bại cho collection %s", request.user_id)

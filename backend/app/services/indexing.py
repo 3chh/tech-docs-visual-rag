@@ -5,8 +5,10 @@ from typing import Any
 
 import requests
 
+from ...core.collections import require_config
 from ...core.config import get_settings
 from ...core.logging import get_logger
+from ...core.providers import resolve_connection
 from ...embeddings import get_embedding_manager
 from ...vectordb import get_vector_manager
 
@@ -21,6 +23,11 @@ class IndexingService:
     def __init__(self, collection: str, create_collection: bool = True):
         self.settings = get_settings()
         self.collection = collection
+
+        # Bộ phải được cấu hình trước khi index: nếu không, người dùng sẽ chỉ
+        # phát hiện thiếu mô hình sau khi đã chờ 20 phút xử lý xong.
+        self.config = require_config(collection)
+
         self.db_manager = get_vector_manager(collection, create_collection=create_collection)
 
     def _call_worker(self, media_dir: str, pdf_path: str, custom_config: dict | None) -> list[dict]:
@@ -77,6 +84,16 @@ class IndexingService:
         custom_config = dict(custom_config or {})
         if max_pages is not None:
             custom_config.setdefault("max_pages", max_pages)
+
+        # Worker cần biết dùng LLM nào để sửa cây mục lục. Giải ở đây thay vì
+        # ở worker, để worker không phải đọc kho kết nối.
+        llm = resolve_connection(self.config.llm_connection_id, "llm")
+        custom_config["toc_validator"] = {
+            **(custom_config.get("toc_validator") or {}),
+            "endpoint": llm.endpoint,
+            "model_name": llm.model_name,
+            "api_key": llm.api_key,
+        }
 
         full_metadatas = self._call_worker(media_dir, pdf_path, custom_config)
         image_paths = [m["image_path"] for m in full_metadatas]

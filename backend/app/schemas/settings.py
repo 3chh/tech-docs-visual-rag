@@ -126,29 +126,10 @@ class ModelEndpoint(BaseModel):
     model_config = {"protected_namespaces": ()}
 
 
-class VlmProviderOut(BaseModel):
-    """Một lựa chọn VLM cho người dùng. Không bao giờ chứa API key."""
-
-    id: str
-    label: str
-    model_name: str
-    endpoint: str
-    description: str
-    needs_gpu: bool
-    is_configured: bool
-    #: Bản che của key, ví dụ `sk-proj-••••4f2a`. Không bao giờ là key gốc.
-    masked_key: Optional[str] = None
-    #: "ui" nếu người dùng nhập trên giao diện, "env" nếu từ biến môi trường.
-    key_source: str = "env"
-
-    model_config = {"protected_namespaces": ()}
-
-
 class ModelsSettings(BaseModel):
     vlm: ModelEndpoint
     llm: ModelEndpoint
-    vlm_providers: list[VlmProviderOut] = Field(default_factory=list)
-    default_vlm_provider: str = "builtin"
+
 
 
 class SettingsResponse(BaseModel):

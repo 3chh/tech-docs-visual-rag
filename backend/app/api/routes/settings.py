@@ -9,7 +9,6 @@ from fastapi import APIRouter
 
 from ....core.config import get_settings
 from ....core.logging import get_logger
-from ....core.providers import list_vlm_providers
 from ....document.llm_report_valid import MIN_SECTION_HEIGHT_PX
 from ....vectordb.qdrant_manager import UPSERT_BATCH_SIZE
 from ...schemas.settings import (
@@ -27,7 +26,6 @@ from ...schemas.settings import (
     SettingsResponse,
     TocValidatorSettings,
     VectorDbSettings,
-    VlmProviderOut,
 )
 from ...services.rag import TOC_PREVIEW_LIMIT
 
@@ -121,21 +119,6 @@ async def read_settings() -> SettingsResponse:
             ),
         ),
         models=ModelsSettings(
-            vlm_providers=[
-                VlmProviderOut(
-                    id=p.id,
-                    label=p.label,
-                    model_name=p.model_name,
-                    endpoint=p.endpoint,
-                    description=p.description,
-                    needs_gpu=p.needs_gpu,
-                    is_configured=p.is_configured,
-                    masked_key=p.masked_key,
-                    key_source=p.key_source,
-                )
-                for p in list_vlm_providers()
-            ],
-            default_vlm_provider=os.environ.get("DEFAULT_VLM_PROVIDER", "builtin"),
             vlm=ModelEndpoint(
                 type=s.vlm.type,
                 endpoint=s.vlm.endpoint,

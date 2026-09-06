@@ -6,9 +6,8 @@
 # VLM chỉ đọc 3-5 ảnh mỗi câu hỏi nên gửi ra API ngoài rẻ và nhanh hơn tự host,
 # đồng thời tiết kiệm ~8GB VRAM.
 #
-# Cần đặt trong .env:
-#   DEFAULT_VLM_PROVIDER=gemini   (hoặc openai, custom)
-#   GEMINI_API_KEY=...            (hoặc OPENAI_CLOUD_API_KEY)
+# Sau khi lên, vào giao diện > Cấu hình > thêm kết nối tới OpenAI hoặc
+# Gemini, rồi tạo bộ tài liệu chọn kết nối đó.
 
 services:
   # Không chạy vLLM: đó chính là điểm của kiểu này.
@@ -16,19 +15,5 @@ services:
     deploy:
       replicas: 0
 
-  backend:
-    environment:
-      # Rỗng để RagService không trỏ về vllm nội bộ nữa.
-      VLM_ENDPOINT: ""
-      DEFAULT_VLM_PROVIDER: ${DEFAULT_VLM_PROVIDER:?Đặt DEFAULT_VLM_PROVIDER=gemini hoặc openai}
-      OPENAI_CLOUD_API_KEY: ${OPENAI_CLOUD_API_KEY:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      CUSTOM_VLM_ENDPOINT: ${CUSTOM_VLM_ENDPOINT:-}
-      CUSTOM_VLM_API_KEY: ${CUSTOM_VLM_API_KEY:-}
-      CUSTOM_VLM_MODEL: ${CUSTOM_VLM_MODEL:-}
-      OPENAI_VLM_MODEL: ${OPENAI_VLM_MODEL:-gpt-4o}
-      GEMINI_VLM_MODEL: ${GEMINI_VLM_MODEL:-gemini-2.0-flash}
-
-  worker:
-    environment:
-      VLM_ENDPOINT: ""
+  # Không cần biến gì thêm: kết nối mô hình do người dùng cấu hình trên
+  # giao diện và lưu trong data/model_connections.json.

@@ -13,6 +13,7 @@ from ...schemas import (
     IndexResponse,
     UploadFilesResponse,
 )
+from ....core.collections import CollectionNotConfigured
 from ...schemas.overrides import ProcessingOverrides
 from ...services.indexing import IndexingService
 from ...services.retrieval import RetrievalService
@@ -36,6 +37,10 @@ async def index_document(request: IndexRequest) -> IndexResponse:
             metadata=request.metadata,
         )
         return IndexResponse(pages_indexed=len(image_paths), status="completed")
+    except CollectionNotConfigured as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("Index thất bại cho user %s", request.user_id)
         raise HTTPException(status_code=500, detail=f"Indexing failed: {e}") from e
@@ -78,6 +83,12 @@ async def upload_files(
 
     try:
         service = IndexingService(db_name, create_collection=True)
+    except CollectionNotConfigured as e:
+        # Chưa chọn mô hình cho bộ này: lỗi của người gọi, không phải lỗi server.
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except ValueError as e:
+        # Kết nối mô hình bị xoá hoặc thiếu key.
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.exception("Không khởi tạo được indexing service")
         raise HTTPException(status_code=500, detail=f"Không kết nối được vector DB: {e}") from e
