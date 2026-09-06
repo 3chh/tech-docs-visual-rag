@@ -195,8 +195,6 @@ export interface SettingsResponse {
   models: {
     vlm: ModelEndpoint;
     llm: ModelEndpoint;
-    vlm_providers: VlmProviderOut[];
-    default_vlm_provider: string;
   };
   data_dir: string;
   metadata_dir: string;
@@ -204,31 +202,119 @@ export interface SettingsResponse {
   editable_note: string;
 }
 
-export interface VlmProviderOut {
-  id: string;
-  label: string;
-  model_name: string;
-  endpoint: string;
-  description: string;
-  /** Provider này có cần GPU trên máy bạn không. */
-  needs_gpu: boolean;
-  /** Đã có API key ở server chưa. Key không bao giờ gửi ra client. */
-  is_configured: boolean;
-}
+/** Khả năng của một kết nối mô hình. */
+export type Capability = "vlm" | "llm";
 
-export interface CredentialStatus {
-  provider_id: string;
-  is_configured: boolean;
+export type ProviderKind = "openai" | "gemini" | "vllm" | "custom";
+
+/** Một kết nối mô hình. KHÔNG bao giờ chứa api_key gốc. */
+export interface ModelConnection {
+  id: string;
+  name: string;
+  provider: string;
+  endpoint: string;
+  model_name: string;
+  capabilities: string[];
   /** Bản che, ví dụ `sk-proj-••••4f2a`. Không bao giờ là key gốc. */
   masked_key: string | null;
-  key_source: string;
-  can_delete: boolean;
-  model_name: string | null;
-  endpoint: string | null;
+  has_key: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface CredentialListResponse {
-  credentials: CredentialStatus[];
+export interface ConnectionListResponse {
+  connections: ModelConnection[];
   /** Key trên đĩa có được mã hoá không. */
   encryption_enabled: boolean;
+  /** Endpoint gợi ý theo nhà cung cấp, để điền sẵn form. */
+  default_endpoints: Record<string, string>;
+  /** Nhà cung cấp không cần API key (vLLM tự host). */
+  providers_without_key: string[];
 }
+
+export interface CreateConnectionInput {
+  name: string;
+  provider: ProviderKind;
+  model_name: string;
+  capabilities: Capability[];
+  api_key?: string;
+  endpoint?: string;
+}
+
+/** Bỏ trống api_key để giữ key hiện tại. */
+export type UpdateConnectionInput = Partial<
+  Omit<CreateConnectionInput, "provider">
+>;
+
+/**
+ * Tham số xử lý riêng của một bộ tài liệu.
+ *
+ * Trường bỏ trống nghĩa là "dùng mặc định của server". KHÔNG điền giá trị mặc
+ * định ở client: làm vậy là ghi đè cấu hình đã lưu của bộ.
+ */
+export interface CollectionProcessing {
+  max_pages?: number;
+  vertical_split?: boolean;
+  preprocess?: {
+    padding?: number;
+    use_cut_padding?: boolean;
+    batch_size?: number;
+    cut_params?: number[];
+    pdf_to_image?: {
+      dpi?: number;
+      min_dpi?: number;
+      anchor_size?: number;
+      thread_count?: number;
+    };
+  };
+  layout?: { batch_size?: number };
+  ocr?: {
+    title_batch_size?: number;
+    number_batch_size?: number;
+    formula_batch_size?: number;
+  };
+  chunking?: { cut_padding?: number; min_section_height_px?: number };
+  toc_validator?: { model_name?: string; temperature?: number };
+}
+
+/** Mặc định hỏi đáp của một bộ tài liệu. */
+export interface CollectionAsk {
+  top_k?: number;
+  use_toc_rewrite?: boolean;
+  toc_preview_limit?: number;
+  system_prompt?: string;
+  vlm_temperature?: number;
+}
+
+export interface CollectionOut {
+  name: string;
+  description: string;
+  vlm_connection_id: string;
+  llm_connection_id: string;
+  created_at: string;
+  updated_at: string;
+  processing: CollectionProcessing;
+  ask: CollectionAsk;
+  /** Cả hai kết nối còn dùng được không. False thì phải chọn lại mô hình. */
+  is_ready: boolean;
+  blocked_reason: string | null;
+}
+
+export interface CollectionListResponse {
+  collections: CollectionOut[];
+  /** Đã có mô hình để tạo bộ chưa. False thì phải sang Cấu hình chung trước. */
+  can_create: boolean;
+  /** Loại mô hình còn thiếu, để nói rõ cần thêm cái gì. */
+  missing_capabilities: string[];
+}
+
+export interface CreateCollectionInput {
+  name: string;
+  vlm_connection_id: string;
+  llm_connection_id: string;
+  description?: string;
+  processing?: CollectionProcessing;
+  ask?: CollectionAsk;
+}
+
+export type UpdateCollectionInput = Partial<Omit<CreateCollectionInput, "name">>;

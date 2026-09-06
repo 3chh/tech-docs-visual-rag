@@ -97,7 +97,6 @@ export function AskPanel({
         useTocRewrite: options.useTocRewrite,
         tocPreviewLimit: options.tocPreviewLimit,
         vlmTemperature: options.vlmTemperature,
-        vlmProvider: options.vlmProvider,
         systemPrompt: options.systemPrompt,
       });
 

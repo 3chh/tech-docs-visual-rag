@@ -22,12 +22,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
+import { ConnectionsSection } from "./ConnectionsSection";
 import {
   LockedSetting,
   SettingGroup,
 } from "./SettingRow";
 import type { StoredSettings } from "./types";
-import { VlmProviderSection } from "./VlmProviderSection";
 
 export interface SettingsDialogProps {
   settings?: StoredSettings;
@@ -123,11 +123,8 @@ export function SettingsDialog({
               <>
                 {/* Tab 1: Mô hình AI */}
                 <TabsContent value="models" className="m-0 space-y-4">
-                  <SettingGroup title="Chọn nguồn model trả lời">
-                    <VlmProviderSection
-                      providers={data?.models.vlm_providers ?? []}
-                      defaultProvider={data?.models.default_vlm_provider ?? "builtin"}
-                    />
+                  <SettingGroup title="Kết nối mô hình">
+                    <ConnectionsSection />
                   </SettingGroup>
 
                   <SettingGroup title="Chi tiết mô hình đang dùng">

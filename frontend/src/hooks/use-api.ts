@@ -8,6 +8,9 @@ export const queryKeys = {
   collections: (userId: string) => ["collections", userId] as const,
   toc: (collection: string) => ["toc", collection] as const,
   sections: (collection: string) => ["sections", collection] as const,
+  connections: ["connections"] as const,
+  configuredCollections: ["configured-collections"] as const,
+  collectionConfig: (name: string) => ["collection-config", name] as const,
 };
 
 export function useHealth() {
@@ -89,5 +92,109 @@ export function useSearch() {
   return useMutation({
     mutationFn: (params: { query: string; collection: string; topK?: number }) =>
       api.search(params),
+  });
+}
+
+// --- Cấu hình chung: kết nối mô hình ---------------------------------------
+
+export function useConnections() {
+  return useQuery({
+    queryKey: queryKeys.connections,
+    queryFn: api.connections,
+    retry: false,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Mọi thao tác ghi kết nối đều trả về danh sách mới, nên chỉ cần đặt lại
+ * cache thay vì fetch lại. Kèm theo phải làm mới danh sách bộ tài liệu vì
+ * `can_create` và `is_ready` của bộ phụ thuộc vào kết nối còn dùng được.
+ */
+function useConnectionMutation<TArgs>(
+  fn: (args: TArgs) => Promise<import("@/lib/types").ConnectionListResponse>,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.connections, data);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.configuredCollections,
+      });
+    },
+  });
+}
+
+export function useCreateConnection() {
+  return useConnectionMutation(api.createConnection);
+}
+
+export function useUpdateConnection() {
+  return useConnectionMutation(
+    ({ id, input }: { id: string; input: import("@/lib/types").UpdateConnectionInput }) =>
+      api.updateConnection(id, input),
+  );
+}
+
+export function useDeleteConnection() {
+  return useConnectionMutation((id: string) => api.deleteConnection(id));
+}
+
+// --- Cấu hình bộ tài liệu --------------------------------------------------
+
+export function useConfiguredCollections() {
+  return useQuery({
+    queryKey: queryKeys.configuredCollections,
+    queryFn: api.configuredCollections,
+    retry: false,
+    staleTime: 15_000,
+  });
+}
+
+export function useCollectionConfig(name: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.collectionConfig(name ?? ""),
+    queryFn: () => api.collection(name as string),
+    enabled: Boolean(name),
+    retry: false,
+  });
+}
+
+function useCollectionWriteInvalidation() {
+  const queryClient = useQueryClient();
+
+  return (name: string) => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.configuredCollections,
+    });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.collectionConfig(name),
+    });
+  };
+}
+
+export function useCreateCollection() {
+  const invalidate = useCollectionWriteInvalidation();
+
+  return useMutation({
+    mutationFn: api.createCollection,
+    onSuccess: (config) => invalidate(config.name),
+  });
+}
+
+export function useUpdateCollection() {
+  const invalidate = useCollectionWriteInvalidation();
+
+  return useMutation({
+    mutationFn: ({
+      name,
+      input,
+    }: {
+      name: string;
+      input: import("@/lib/types").UpdateCollectionInput;
+    }) => api.updateCollection(name, input),
+    onSuccess: (config) => invalidate(config.name),
   });
 }

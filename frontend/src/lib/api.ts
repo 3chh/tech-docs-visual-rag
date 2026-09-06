@@ -2,11 +2,17 @@
 
 import type {
   AskResponse,
-  CredentialListResponse,
+  CollectionListResponse,
+  CollectionOut,
+  ConnectionListResponse,
+  CreateCollectionInput,
+  CreateConnectionInput,
   HealthResponse,
   SearchResponse,
   SettingsResponse,
   TableOfContents,
+  UpdateCollectionInput,
+  UpdateConnectionInput,
   UploadFileMeta,
   UploadResponse,
 } from "./types";
@@ -18,14 +24,50 @@ const SEARCH_TIMEOUT_MS = 1_000_000;
 const UPLOAD_TIMEOUT_MS = 3_600_000;
 const QUICK_TIMEOUT_MS = 15_000;
 
+/** Mã lỗi backend mà UI cần phân biệt để xử lý khác nhau. */
+export const ERR_NO_MODELS = "no_models_configured";
+export const ERR_COLLECTION_NOT_CONFIGURED = "collection_not_configured";
+export const ERR_CONNECTION_INVALID = "connection_invalid";
+
+/**
+ * Backend trả lỗi dạng `{detail: {code, message}}`. `code` là hợp đồng ổn
+ * định để UI rẽ nhánh: `no_models_configured` thì mở popup dẫn sang Cấu hình
+ * chung, còn `connection_invalid` thì báo ngay tại field. Chuỗi `message`
+ * đổi được mà không làm hỏng client.
+ */
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly code?: string,
+    readonly extra?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+function parseError(status: number, body: string): ApiError {
+  try {
+    const detail = (JSON.parse(body) as { detail?: unknown }).detail;
+
+    if (typeof detail === "string") return new ApiError(detail, status);
+
+    if (detail && typeof detail === "object") {
+      const { code, message, ...extra } = detail as {
+        code?: string;
+        message?: string;
+      };
+      return new ApiError(message ?? `HTTP ${status}`, status, code, extra);
+    }
+  } catch {
+    // Không phải JSON (ví dụ lỗi từ nginx): dùng nguyên văn bên dưới.
+  }
+
+  return new ApiError(
+    body ? `${status}: ${body.slice(0, 300)}` : `HTTP ${status}`,
+    status,
+  );
 }
 
 async function request<T>(
@@ -44,10 +86,7 @@ async function request<T>(
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new ApiError(
-        body ? `${response.status}: ${body.slice(0, 300)}` : `HTTP ${response.status}`,
-        response.status,
-      );
+      throw parseError(response.status, body);
     }
 
     return (await response.json()) as T;
@@ -74,42 +113,92 @@ function postJson<T>(path: string, body: unknown, timeoutMs?: number): Promise<T
   );
 }
 
+function sendJson<T>(
+  path: string,
+  method: "POST" | "PUT" | "DELETE",
+  body?: unknown,
+): Promise<T> {
+  return request<T>(path, {
+    method,
+    headers:
+      body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 export const api = {
   health(): Promise<HealthResponse> {
     return request<HealthResponse>("/health");
   },
 
+  /** Thông tin hệ thống, chỉ đọc — đổi những giá trị này phải deploy lại. */
   settings(): Promise<SettingsResponse> {
     return request<SettingsResponse>("/settings");
   },
 
-  /** Provider nào đã có key, kèm bản che. Không bao giờ trả key gốc. */
-  credentials(): Promise<CredentialListResponse> {
-    return request<CredentialListResponse>("/credentials");
+  // --- Cấu hình chung: kết nối mô hình -----------------------------------
+  // Key chỉ đi một chiều lên server; đọc lên chỉ được bản che.
+
+  connections(): Promise<ConnectionListResponse> {
+    return request<ConnectionListResponse>("/connections");
   },
 
-  /** Lưu key cho một provider. Key chỉ đi một chiều lên server. */
-  saveCredential(
-    providerId: string,
-    payload: { apiKey: string; modelName?: string; endpoint?: string },
-  ): Promise<CredentialListResponse> {
-    return request<CredentialListResponse>(`/credentials/${providerId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: payload.apiKey,
-        model_name: payload.modelName,
-        endpoint: payload.endpoint,
-      }),
+  createConnection(input: CreateConnectionInput): Promise<ConnectionListResponse> {
+    return sendJson<ConnectionListResponse>("/connections", "POST", input);
+  },
+
+  /** Bỏ trống api_key để giữ key hiện tại. */
+  updateConnection(
+    id: string,
+    input: UpdateConnectionInput,
+  ): Promise<ConnectionListResponse> {
+    return sendJson<ConnectionListResponse>(`/connections/${id}`, "PUT", input);
+  },
+
+  deleteConnection(id: string): Promise<ConnectionListResponse> {
+    return sendJson<ConnectionListResponse>(`/connections/${id}`, "DELETE");
+  },
+
+  // --- Cấu hình bộ tài liệu ----------------------------------------------
+
+  /** Bộ đã cấu hình, kèm can_create và loại mô hình còn thiếu. */
+  configuredCollections(): Promise<CollectionListResponse> {
+    return request<CollectionListResponse>("/collections");
+  },
+
+  collection(name: string): Promise<CollectionOut | null> {
+    return request<CollectionOut>(
+      `/collections/${encodeURIComponent(name)}`,
+    ).catch((error: unknown) => {
+      // 404 nghĩa là bộ chưa được cấu hình, không phải lỗi hệ thống.
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
     });
   },
 
-  deleteCredential(providerId: string): Promise<CredentialListResponse> {
-    return request<CredentialListResponse>(`/credentials/${providerId}`, {
-      method: "DELETE",
-    });
+  createCollection(input: CreateCollectionInput): Promise<CollectionOut> {
+    return sendJson<CollectionOut>("/collections", "POST", input);
   },
 
+  updateCollection(
+    name: string,
+    input: UpdateCollectionInput,
+  ): Promise<CollectionOut> {
+    return sendJson<CollectionOut>(
+      `/collections/${encodeURIComponent(name)}`,
+      "PUT",
+      input,
+    );
+  },
+
+  deleteCollection(name: string): Promise<{ status: string; note: string }> {
+    return sendJson<{ status: string; note: string }>(
+      `/collections/${encodeURIComponent(name)}`,
+      "DELETE",
+    );
+  },
+
+  /** Tên các collection đã có dữ liệu trong vector DB. */
   listCollections(userId: string): Promise<string[]> {
     return request<{ collections: string[] }>(
       `/list_collections/${encodeURIComponent(userId)}`,
@@ -128,20 +217,24 @@ export const api = {
     systemPrompt?: string;
     tocPreviewLimit?: number;
     vlmTemperature?: number;
-    vlmProvider?: string;
+    /** Thử model khác cho riêng lượt này, không sửa cấu hình bộ. */
+    connectionId?: string;
   }): Promise<AskResponse> {
+    // Để undefined chứ KHÔNG điền mặc định ở đây: undefined nghĩa là "dùng
+    // mặc định của bộ tài liệu". Điền sẵn 5 hay true là vô hiệu hoá cấu hình
+    // bộ, vì server không phân biệt được với việc người dùng chọn đúng số đó.
     return postJson<AskResponse>(
       "/ask",
       {
         query: params.query,
         user_id: params.collection,
-        top_k: params.topK ?? 5,
-        use_toc_rewrite: params.useTocRewrite ?? true,
-        system_prompt: params.systemPrompt ?? "",
+        top_k: params.topK,
+        use_toc_rewrite: params.useTocRewrite,
+        system_prompt: params.systemPrompt,
         include_base64: true,
         toc_preview_limit: params.tocPreviewLimit,
         vlm_temperature: params.vlmTemperature,
-        vlm_provider: params.vlmProvider,
+        connection_id: params.connectionId,
       },
       SEARCH_TIMEOUT_MS,
     );
