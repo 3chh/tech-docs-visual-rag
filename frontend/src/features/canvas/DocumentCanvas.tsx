@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { PageBadgeList } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -28,36 +27,92 @@ import { cn } from "@/lib/utils";
 
 import { PdfViewer } from "./PdfViewer";
 
-// Ánh xạ các điều khoản / trích dẫn sang các trang thật trong sample_document.pdf (14 trang)
+export interface DocumentTarget {
+  pdfUrl: string;
+  page: number;
+  totalPages: number;
+  documentTitle: string;
+}
+
+/**
+ * Phân giải tài liệu và số trang cụ thể khi nhấp vào mục lục hoặc trích dẫn.
+ * Hỗ trợ 2 file riêng biệt:
+ * 1. TCVN 11823:2017 -> /sample_document.pdf (14 trang)
+ * 2. QCVN 02:2022/BXD -> /qcvn_02_2022.pdf (5 trang)
+ */
+export function resolveDocumentTarget(
+  source?: SearchResult | null,
+  section?: TocSection | null,
+  bookIndex?: number
+): DocumentTarget {
+  const fileName = String(source?.metadata?.file_name ?? "");
+  const isQcvn =
+    bookIndex === 1 ||
+    Boolean(section?.title?.includes("1.1")) ||
+    Boolean(section?.title?.includes("2.2")) ||
+    Boolean(section?.title?.includes("3.3")) ||
+    fileName.includes("qcvn") ||
+    Boolean(source?.image_path?.includes("qcvn")) ||
+    Boolean(source?.section_title?.includes("1.1")) ||
+    Boolean(source?.section_title?.includes("2.2")) ||
+    Boolean(source?.section_title?.includes("3.3")) ||
+    Boolean(source?.ancestors?.some((a) => String(a).includes("QCVN")));
+
+  if (isQcvn) {
+    const title = section?.title || source?.section_title || "";
+    let page = 1;
+    if (title.includes("1.1")) page = 2;
+    else if (title.includes("2.2")) page = 3;
+    else if (title.includes("3.3")) page = 4;
+    else if (section && typeof section.index === "number") {
+      page = Math.min(Math.max(1, section.index + 1), 5);
+    } else {
+      const pageStr = source?.section_pages?.[0]?.replace(/\D/g, "");
+      if (pageStr) {
+        const p = parseInt(pageStr, 10);
+        page = Math.min(Math.max(1, p), 5);
+      }
+    }
+    return {
+      pdfUrl: "/qcvn_02_2022.pdf",
+      page,
+      totalPages: 5,
+      documentTitle: "QCVN 02:2022/BXD",
+    };
+  }
+
+  // Mặc định: TCVN 11823:2017 (Quyển 0)
+  const title = section?.title || source?.section_title || "";
+  let page = 1;
+  if (title.includes("5.1")) page = 2;
+  else if (title.includes("5.4.4")) page = 3;
+  else if (title.includes("5.4.5")) page = 4;
+  else if (title.includes("5.7")) page = 5;
+  else if (title.includes("Bìa") || title === "noname") page = 1;
+  else if (section && typeof section.index === "number") {
+    page = Math.min(Math.max(1, section.index + 1), 14);
+  } else {
+    const pageStr = source?.section_pages?.[0]?.replace(/\D/g, "");
+    if (pageStr) {
+      const p = parseInt(pageStr, 10);
+      page = Math.min(Math.max(1, p > 14 ? p - 90 : p), 14);
+    }
+  }
+
+  return {
+    pdfUrl: "/sample_document.pdf",
+    page,
+    totalPages: 14,
+    documentTitle: "TCVN 11823:2017",
+  };
+}
+
 export function resolveDocumentPage(
   source?: SearchResult | null,
   section?: TocSection | null,
   bookIndex?: number
 ): number {
-  const title = section?.title || source?.section_title || "";
-
-  if (title.includes("5.1")) return 2;
-  if (title.includes("5.4.4")) return 3;
-  if (title.includes("5.4.5")) return 4;
-  if (title.includes("5.7")) return 5;
-  if (title.includes("1.1")) return 6;
-  if (title.includes("2.2")) return 7;
-  if (title.includes("3.3")) return 8;
-  if (title.includes("Bìa") || title === "noname") return 1;
-
-  if (section && typeof section.index === "number") {
-    const offset = (bookIndex ?? 0) * 5;
-    return Math.min(Math.max(1, ((section.index + offset) % 14) + 1), 14);
-  }
-
-  const pageStr = source?.section_pages?.[0]?.replace(/\D/g, "");
-  if (pageStr) {
-    const p = parseInt(pageStr, 10);
-    if (p >= 90) return Math.min(Math.max(1, p - 90), 14); // 93 -> 3, 94 -> 4, 95 -> 5
-    return Math.min(Math.max(1, (p % 14) || 1), 14);
-  }
-
-  return 1;
+  return resolveDocumentTarget(source, section, bookIndex).page;
 }
 
 interface DocumentCanvasProps {
@@ -86,13 +141,19 @@ export function DocumentCanvas({
   const [, setCopiedFormula] = useState<string | null>(null);
   const [openBooks, setOpenBooks] = useState<Set<number>>(new Set([0]));
   const [viewMode, setViewMode] = useState<"slice" | "pdf">("pdf");
-  const [pdfTargetPage, setPdfTargetPage] = useState<number>(() => resolveDocumentPage(source));
+
+  const initialTarget = resolveDocumentTarget(source);
+  const [activePdfUrl, setActivePdfUrl] = useState<string>(initialTarget.pdfUrl);
+  const [pdfTargetPage, setPdfTargetPage] = useState<number>(initialTarget.page);
+  const [currentTotalPages, setCurrentTotalPages] = useState<number>(initialTarget.totalPages);
 
   // Tự động nhảy tới trang tài liệu thật khi nguồn trích dẫn thay đổi
   useEffect(() => {
     if (source) {
-      const page = resolveDocumentPage(source);
-      setPdfTargetPage(page);
+      const target = resolveDocumentTarget(source);
+      setActivePdfUrl(target.pdfUrl);
+      setPdfTargetPage(target.page);
+      setCurrentTotalPages(target.totalPages);
     }
   }, [source]);
 
@@ -108,11 +169,22 @@ export function DocumentCanvas({
   }
 
   async function handleSelectTocSection(section: TocSection, bookIdx: number = 0) {
-    const page = resolveDocumentPage(null, section, bookIdx);
-    setPdfTargetPage(page);
+    const target = resolveDocumentTarget(null, section, bookIdx);
+    setActivePdfUrl(target.pdfUrl);
+    setPdfTargetPage(target.page);
+    setCurrentTotalPages(target.totalPages);
 
     if (!section.title || section.title === "noname") {
-      onSelectSource?.(null);
+      onSelectSource?.({
+        section_title: "Bìa & Mục lục đầu",
+        ancestors: [target.documentTitle],
+        section_pages: [`Trang ${target.page}`],
+        formulas: [],
+        metadata: { file_name: target.pdfUrl.replace("/", "") },
+        image_path: `${target.pdfUrl}#page=${target.page}`,
+        image_base64: null,
+        chunk_images: [],
+      });
       return;
     }
 
@@ -126,7 +198,12 @@ export function DocumentCanvas({
       if (response.results[0] && onSelectSource) {
         onSelectSource({
           ...response.results[0],
-          section_pages: [`Trang ${page}`],
+          section_title: section.title,
+          section_pages: [`Trang ${target.page}`],
+          metadata: {
+            ...response.results[0].metadata,
+            file_name: target.pdfUrl.replace("/", ""),
+          },
         });
       }
     } catch {
@@ -253,22 +330,6 @@ export function DocumentCanvas({
         </div>
       </header>
 
-      {/* --- Sub-header: Metadata & Page Badges --- */}
-      {source && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/15 px-3 py-1.5 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-muted-foreground text-[11px]">Trang:</span>
-            <PageBadgeList pages={source.section_pages} max={6} />
-          </div>
-          {source.formulas && source.formulas.length > 0 && (
-            <div className="flex items-center gap-1 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
-              <Sigma className="size-3.5" />
-              <span>{source.formulas.length} {t("formulas_found")}</span>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* --- Main Body: Split between Document ToC & Viewer --- */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Document ToC Tree Sidebar inside Canvas */}
@@ -374,7 +435,7 @@ export function DocumentCanvas({
           {/* MODE 1: Toàn văn tài liệu gốc cuộn liên tục */}
           {viewMode === "pdf" && (
             <PdfViewer
-              pdfUrl="/sample_document.pdf"
+              pdfUrl={activePdfUrl}
               initialPage={pdfTargetPage}
               zoom={zoom}
               singlePage={false}
@@ -394,14 +455,14 @@ export function DocumentCanvas({
                   </span>
                 </div>
                 <span className="font-mono text-[11px] text-muted-foreground shrink-0 ml-2">
-                  Trang tham chiếu: {pdfTargetPage} / 14
+                  Trang tham chiếu: {pdfTargetPage} / {currentTotalPages}
                 </span>
               </div>
 
               {/* Single Page Reader on the REAL PDF document */}
               <div className="flex-1 min-h-0">
                 <PdfViewer
-                  pdfUrl="/sample_document.pdf"
+                  pdfUrl={activePdfUrl}
                   initialPage={pdfTargetPage}
                   zoom={zoom}
                   singlePage={true}

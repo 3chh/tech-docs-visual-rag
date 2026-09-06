@@ -11,15 +11,62 @@ interface MarkdownMessageProps {
   className?: string;
 }
 
+/**
+ * Tiền xử lý văn bản Markdown / LaTeX để KaTeX và remark-math biên dịch hoàn hảo.
+ * Tự động sửa các lỗi phổ biến từ mô hình ngôn ngữ hoặc dữ liệu:
+ * - Ký hiệu \( ... \) và \[ ... \]
+ * - Dấu $ bị thiếu đóng ở cuối câu/dòng
+ * - Khối phương trình $$...$$ cần dòng trống bao quanh
+ */
+export function preprocessMarkdown(text: string): string {
+  if (!text) return "";
+
+  // 1. Chuyển đổi ký hiệu LaTeX \( ... \) sang $ ... $
+  let processed = text.replace(/\\\(([\s\S]*?)\\\)/g, "$$1$");
+
+  // 2. Chuyển đổi khối LaTeX \[ ... \] sang $$ ... $$
+  processed = processed.replace(/\\\[([\s\S]*?)\\\]/g, "\n\n$$$$1$$\n\n");
+
+  // 3. Tự động đóng dấu $ mở bị thiếu đóng (ví dụ: $\lambda = l_e / r. -> $\lambda = l_e / r$.)
+  const lines = processed.split("\n");
+  const fixedLines = lines.map((line) => {
+    const dollarMatches = line.match(/(?<!\\)\$/g);
+    if (dollarMatches && dollarMatches.length % 2 !== 0) {
+      const lastDollarIdx = line.lastIndexOf("$");
+      const afterLastDollar = line.slice(lastDollarIdx + 1);
+      if (
+        afterLastDollar.includes("\\") ||
+        afterLastDollar.includes("=") ||
+        afterLastDollar.includes("/") ||
+        afterLastDollar.includes("_")
+      ) {
+        const punctMatch = afterLastDollar.match(/([.,;:!?])\s*$/);
+        if (punctMatch && punctMatch.index !== undefined) {
+          const mathBody = afterLastDollar.slice(0, punctMatch.index);
+          const punct = afterLastDollar.slice(punctMatch.index);
+          return line.slice(0, lastDollarIdx) + `$${mathBody}$` + punct;
+        } else {
+          return line + "$";
+        }
+      }
+    }
+    return line;
+  });
+
+  processed = fixedLines.join("\n");
+
+  // 4. Đảm bảo khối $$...$$ có dòng trống bao quanh để remark-math parse chính xác
+  processed = processed.replace(/([^\n])\s*\$\$([\s\S]*?)\$\$\s*([^\n])/g, "$1\n\n$$$2$$\n\n$3");
+
+  return processed;
+}
+
 export function MarkdownMessage({
   content,
   className,
 }: MarkdownMessageProps) {
-  // Tiền xử lý để đảm bảo công thức math $$...$$ và [...] luôn hiển thị chuẩn
   const processedContent = React.useMemo(() => {
-    if (!content) return "";
-    // Đảm bảo khối $$...$$ có dòng trống hoặc cách dòng chuẩn cho remark-math
-    return content;
+    return preprocessMarkdown(content);
   }, [content]);
 
   return (

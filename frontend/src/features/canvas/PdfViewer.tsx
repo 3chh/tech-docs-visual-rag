@@ -335,22 +335,26 @@ export function PdfViewer({
     }, 450);
   }
 
-  // Chuyển trang khi initialPage thay đổi từ bên ngoài (ví dụ nhấp ToC hoặc chọn trích dẫn)
+  // Chuyển trang khi initialPage hoặc pdfUrl thay đổi từ bên ngoài (nhấp ToC hoặc chọn trích dẫn)
+  const prevInitialPageRef = useRef<number | null>(null);
+  const prevPdfUrlRef = useRef<string>(pdfUrl);
   useEffect(() => {
-    if (
-      initialPage >= 1 &&
-      initialPage <= totalPages &&
-      initialPage !== currentPage
-    ) {
-      if (singlePage) {
-        setCurrentPage(initialPage);
-        setJumpPageInput(String(initialPage));
-        onPageChange?.(initialPage, totalPages);
-      } else if (pageHeight > 0) {
-        scrollToPage(initialPage);
+    if (initialPage >= 1 && initialPage <= totalPages) {
+      const urlChanged = prevPdfUrlRef.current !== pdfUrl;
+      const pageChanged = prevInitialPageRef.current !== initialPage || initialPage !== currentPage;
+      if (urlChanged || pageChanged) {
+        prevPdfUrlRef.current = pdfUrl;
+        prevInitialPageRef.current = initialPage;
+        if (singlePage) {
+          setCurrentPage(initialPage);
+          setJumpPageInput(String(initialPage));
+          onPageChange?.(initialPage, totalPages);
+        } else if (pageHeight > 0) {
+          scrollToPage(initialPage);
+        }
       }
     }
-  }, [initialPage, totalPages, pageHeight, singlePage]);
+  }, [initialPage, totalPages, pageHeight, singlePage, pdfUrl, currentPage]);
 
   // Kéo thả chuột để di chuyển (Pan) trong tài liệu
   function handleMouseDown(e: React.MouseEvent<HTMLDivElement>) {

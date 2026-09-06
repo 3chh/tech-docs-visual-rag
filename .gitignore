@@ -27,6 +27,7 @@ volumes/
 
 # Tài liệu nguồn (user tự đặt vào volume)
 *.pdf
+!frontend/public/*.pdf
 *.png
 *.jpg
 *.jpeg

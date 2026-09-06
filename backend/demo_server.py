@@ -151,7 +151,7 @@ MOCK_TOC = {
                 {
                     "index": 4,
                     "title": "5.7 Liên kết bu lông cường độ cao và mối hàn",
-                    "page_range": "110-125",
+                    "page_range": "5-14",
                     "formulas": 4,
                     "ancestors": [0],
                     "ancestor_titles": ["Chương 5: Kết cấu thép"],
@@ -162,14 +162,14 @@ MOCK_TOC = {
             "book_index": 1,
             "book_folder": "1",
             "title": "QCVN 02:2022/BXD - Quy chuẩn Quốc gia về Số liệu Điều kiện Tự nhiên Xây dựng",
-            "total_pages": 96,
+            "total_pages": 5,
             "total_sections": 4,
-            "page_numbers": {"0": "-i-", "1": "-1-", "2": "-18-", "3": "-19-"},
+            "page_numbers": {"0": "-i-", "1": "-1-", "2": "-2-", "3": "-3-"},
             "sections": [
                 {
                     "index": 0,
                     "title": "noname",
-                    "page_range": "1-3",
+                    "page_range": "1-1",
                     "formulas": 0,
                     "ancestors": [],
                     "ancestor_titles": ["Bìa và Giới thiệu"],
@@ -177,7 +177,7 @@ MOCK_TOC = {
                 {
                     "index": 1,
                     "title": "1.1 Quy định chung và phạm vi bắt buộc",
-                    "page_range": "4-10",
+                    "page_range": "2-2",
                     "formulas": 0,
                     "ancestors": [0],
                     "ancestor_titles": ["1. Quy định chung"],
@@ -185,7 +185,7 @@ MOCK_TOC = {
                 {
                     "index": 2,
                     "title": "2.2 Phân vùng gió bão và áp lực gió tiêu chuẩn",
-                    "page_range": "18-24",
+                    "page_range": "3-3",
                     "formulas": 2,
                     "ancestors": [0],
                     "ancestor_titles": ["2. Dữ liệu khí tượng và gió"],
@@ -193,8 +193,8 @@ MOCK_TOC = {
                 {
                     "index": 3,
                     "title": "3.3 Tổ hợp tác động và hệ số tầm quan trọng",
-                    "page_range": "35-42",
-                    "formulas": 3,
+                    "page_range": "4-5",
+                    "formulas": 1,
                     "ancestors": [0],
                     "ancestor_titles": ["3. Tác động tự nhiên"],
                 },
@@ -219,7 +219,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_OPTIONS(self):
-        self.send_response(204)
+        self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
@@ -269,26 +269,71 @@ class DemoHandler(SimpleHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length) if length > 0 else b"{}"
         try:
-            payload = json.loads(body.decode("utf-8"))
+            payload = json.loads(body.decode("utf-8", errors="replace"))
         except Exception:
             payload = {}
 
         if path in ("/search_by_section_title", "/api/v1/search/search_by_section_title"):
-            title = payload.get("sectionTitle", "5.4.4 Cấu kiện chịu nén đúng tâm và nén uốn")
-            result = {
-                "section_title": title,
-                "ancestors": ["Chương 5: Kết cấu thép", "5.4 Trạng thái giới hạn chịu lực"],
-                "section_pages": ["Trang 3", "Trang 4"],
-                "formulas": [
-                    {"content": r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}", "coordinate": [100, 150, 450, 200], "page": "Trang 3"},
-                    {"content": r"\lambda = \dfrac{l_e}{r}", "coordinate": [100, 220, 350, 260], "page": "Trang 3"},
-                    {"content": r"\sigma_{cud} = \rho_{cg} \cdot \sigma_y", "coordinate": [100, 280, 480, 320], "page": "Trang 4"},
-                ],
-                "metadata": {"file_name": "sample_document.pdf", "db_name": "tcvn"},
-                "image_path": "/sample_document.pdf#page=3",
-                "image_base64": None,
-                "chunk_images": [],
-            }
+            title = (
+                payload.get("section_title")
+                or payload.get("sectionTitle")
+                or "5.4.4 Cấu kiện chịu nén đúng tâm và nén uốn"
+            )
+            is_qcvn = (
+                "1.1" in title
+                or "2.2" in title
+                or "3.3" in title
+                or payload.get("bookIndex") == 1
+            )
+
+            if is_qcvn:
+                page = 2 if "1.1" in title else (3 if "2.2" in title else (4 if "3.3" in title else 1))
+                formulas = []
+                if "2.2" in title:
+                    formulas = [
+                        {"content": r"W_0 = \gamma \cdot q_{3s,10}", "coordinate": [100, 150, 450, 200], "page": "Trang 3"},
+                        {"content": r"v_{10} = \sqrt{\dfrac{2 W_0}{\rho}}", "coordinate": [100, 220, 350, 260], "page": "Trang 3"},
+                    ]
+                elif "3.3" in title:
+                    formulas = [
+                        {"content": r"S_d = \sum \gamma_{Gi} G_{ki} + \gamma_{Q1} Q_{k1} + \sum \psi_{0j} Q_{kj}", "coordinate": [100, 150, 450, 200], "page": "Trang 4"},
+                    ]
+                result = {
+                    "section_title": title,
+                    "ancestors": ["QCVN 02:2022/BXD", "Số liệu điều kiện tự nhiên"],
+                    "section_pages": [f"Trang {page}"],
+                    "formulas": formulas,
+                    "metadata": {"file_name": "qcvn_02_2022.pdf", "db_name": "qcvn"},
+                    "image_path": f"/qcvn_02_2022.pdf#page={page}",
+                    "image_base64": None,
+                    "chunk_images": [],
+                }
+            else:
+                page = 2 if "5.1" in title else (3 if "5.4.4" in title else (4 if "5.4.5" in title else (5 if "5.7" in title else 1)))
+                formulas = []
+                if "5.4.4" in title:
+                    formulas = [
+                        {"content": r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}", "coordinate": [100, 150, 450, 200], "page": "Trang 3"},
+                        {"content": r"\lambda = \dfrac{l_e}{r}", "coordinate": [100, 220, 350, 260], "page": "Trang 3"},
+                    ]
+                elif "5.4.5" in title:
+                    formulas = [
+                        {"content": r"\sigma_t = \dfrac{N}{A_n} \le f_y", "coordinate": [100, 150, 450, 200], "page": "Trang 4"},
+                    ]
+                elif "5.7" in title:
+                    formulas = [
+                        {"content": r"V_n = 0.6 \cdot f_{ub} \cdot m \cdot A_b", "coordinate": [100, 150, 450, 200], "page": "Trang 5"},
+                    ]
+                result = {
+                    "section_title": title,
+                    "ancestors": ["Chương 5: Kết cấu thép", "5.4 Trạng thái giới hạn chịu lực"],
+                    "section_pages": [f"Trang {page}"],
+                    "formulas": formulas,
+                    "metadata": {"file_name": "sample_document.pdf", "db_name": "tcvn"},
+                    "image_path": f"/sample_document.pdf#page={page}",
+                    "image_base64": None,
+                    "chunk_images": [],
+                }
             self._send_json({"results": [result], "total": 1})
             return
 
@@ -316,7 +361,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
                 "Trong đó:\n"
                 "- $N$: Lực nén dọc trục tính toán theo tổ hợp tác động cơ bản.\n"
                 "- $A_g$: Diện tích mặt cắt ngang nguyên của thanh thép.\n"
-                "- $\\sigma_{cud}$: Ứng suất nén giới hạn danh định, phụ thuộc vào độ mảnh $\\lambda = l_e / r$.\n\n"
+                "- $\\sigma_{cud}$ : Ứng suất nén giới hạn danh định, phụ thuộc vào độ mảnh $\\lambda = \\dfrac{l_e}{r}$.\n\n"
                 "2. **Hệ số uốn dọc và ổn định cục bộ:**\n"
                 "Được tra theo **Bảng 5.4.1** (Trang 4) căn cứ vào cấp độ dẻo và bề dày bản cánh/bản bụng."
             )
