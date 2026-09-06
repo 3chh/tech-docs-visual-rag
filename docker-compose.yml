@@ -242,10 +242,10 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     environment:
-      DOMAIN: "${DOMAIN:?Chua co DOMAIN de xin chung chi TLS}"
+      DOMAIN: ${DOMAIN:-localhost}
       ACME_EMAIL: ${ACME_EMAIL:-}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:-cosmo}
-      BASIC_AUTH_HASH: "${BASIC_AUTH_HASH:?Chua co BASIC_AUTH_HASH, sinh bang lenh caddy hash-password}"
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:-}
 
 volumes:
   qdrant-data:
