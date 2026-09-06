@@ -1,23 +1,26 @@
 # PDF worker: PaddleOCR + layout detection + ghép ảnh-mục.
 # Tách khỏi API service vì nạp bộ model khác và cần poppler.
 #
-# Dùng image chính thức của Paddle vì hai lý do:
-#   1. GPU Blackwell (RTX 5090, sm_120) cần Paddle build với CUDA 12.9.
-#   2. Index wheel của Paddle (paddlepaddle.org.cn/packages/...) render bằng
-#      JS nên pip không đọc được link nào, và PyPI chỉ có paddlepaddle-gpu tới
-#      2.6.2 — tức là không có cách nào pip cài được Paddle 3.x. Image đã có
-#      Paddle + CUDA + cuDNN khớp nhau sẵn.
-FROM paddlepaddle/paddle:3.1.0-gpu-cuda12.9-cudnn9.9
+# Worker chạy CPU, không GPU. Lý do: Paddle chưa có wheel nào biên dịch cho
+# Blackwell. Image GPU chính thức mới nhất chỉ build tới sm_90 — trên RTX 5090
+# (sm_120) nó chết với "Unsupported GPU architecture: compiled for 61 70 75 80
+# 86 89 90, but your current GPU is 120". Đã kiểm với 3.1.0-gpu-cuda12.9.
+#
+# Đánh đổi chấp nhận được: index là việc offline chạy theo đợt, còn phần trả
+# lời câu hỏi (ColQwen + vLLM) vẫn dùng GPU đầy đủ nên tốc độ chat không đổi.
+# Bù lại worker chạy được trên máy không GPU và không tranh VRAM.
+FROM python:3.10-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# poppler-utils cho pdf2image; libgl/libglib cho opencv; curl cho HEALTHCHECK.
+# poppler-utils cho pdf2image; libgl/libglib cho opencv; libgomp1 cho OpenMP
+# của Paddle (bắt buộc, thiếu là import paddle fail); curl cho HEALTHCHECK.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         poppler-utils \
-        libgl1 libglib2.0-0 \
+        libgl1 libglib2.0-0 libgomp1 \
         curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

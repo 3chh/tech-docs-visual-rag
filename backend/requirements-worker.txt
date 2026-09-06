@@ -1,11 +1,14 @@
 # PDF worker: layout detection + OCR + ghép ảnh-mục
 #
-# paddlepaddle KHÔNG cài bằng pip ở đây: index wheel của Paddle
-# (paddlepaddle.org.cn/packages/stable/cuXXX/) render bằng JS nên pip không
-# thấy link nào, còn PyPI chỉ có paddlepaddle-gpu tới 2.6.2. Paddle đến từ
-# base image trong Dockerfile.worker, đã khớp CUDA và cuDNN.
+# paddlepaddle (CPU) chứ không phải paddlepaddle-gpu, vì hai lẽ:
+#   1. Paddle chưa có wheel biên dịch cho Blackwell (sm_120) — xem
+#      Dockerfile.worker.
+#   2. Index wheel GPU của Paddle (paddlepaddle.org.cn/packages/...) render
+#      bằng JS nên pip không đọc được link nào, và PyPI chỉ có
+#      paddlepaddle-gpu tới 2.6.2. Bản CPU thì có 3.x trên PyPI bình thường.
 -r requirements-base.txt
 
+paddlepaddle==3.0.0
 paddleocr==3.1.1
 paddlex==3.1.4
 pdf2image==1.17.0

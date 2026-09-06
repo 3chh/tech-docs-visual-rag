@@ -153,8 +153,9 @@ Mục cuối đáng lưu ý: bản gốc đọc `config.get("provider")` nhưng 
 | Rủi ro | Mức | Cách phát hiện sớm |
 |---|---|---|
 | ~~`paddlepaddle-gpu` không cài được~~ | ✅ đã sửa | Paddle lấy từ base image |
-| Paddle/torch có nhận GPU Blackwell (sm_120) | 🔴 | `docker compose build` rồi `make health` |
-| `paddleocr==3.1.1` với Paddle 3.1.0 | 🔴 | build worker |
+| torch nhận GPU Blackwell (sm_120) | ✅ | đã kiểm: torch 2.7.0+cu128 chạy trên RTX 5090 |
+| Paddle nhận sm_120 | ❌ **không hỗ trợ** | image gpu-cuda12.9 chỉ build tới sm_90 → worker chuyển sang CPU |
+| `paddleocr==3.1.1` với `paddlepaddle==3.0.0` (CPU) | 🔴 | build worker |
 | `colpali-engine==0.3.12` với torch 2.7.0 | 🔴 | build backend |
 | Thuật toán bị đổi ngoài ý muốn khi port | 🟠 | So kết quả với bản gốc (mục 6) |
 | Volume `/data` không chia sẻ đúng | 🟠 | Ảnh không hiện trong UI |

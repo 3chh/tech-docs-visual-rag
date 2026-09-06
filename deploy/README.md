@@ -5,10 +5,14 @@ Chia deploy theo đó, không theo "frontend/backend".
 
 | Thành phần | Model | VRAM | Chạy khi nào |
 |---|---|---|---|
-| **worker** | PaddleOCR + PP-DocLayout | ~5-6 GB | Lúc index tài liệu |
+| **worker** | PaddleOCR + PP-DocLayout | **0 — chạy CPU** | Lúc index tài liệu |
 | **backend** | ColQwen 2.5-3B | ~9-10 GB | Cả lúc index và lúc truy vấn |
 | **vllm** | VLM (InternVL3-8B) | ~8 GB | Chỉ lúc trả lời |
 | **frontend + qdrant** | không | 0 | Luôn luôn |
+
+Worker chạy CPU vì Paddle chưa có wheel biên dịch cho GPU Blackwell (sm_120);
+bản GPU mới nhất chỉ tới sm_90. Index chậm hơn nhưng đó là việc offline, còn
+phần trả lời câu hỏi vẫn GPU đầy đủ. Số luồng đặt bằng `OMP_NUM_THREADS`.
 
 Điểm quan trọng: **vllm là thứ tốn VRAM mà bỏ được** — thay bằng API ngoài
 (OpenAI, Gemini) thì tiết kiệm 8GB và chất lượng thường tốt hơn.
@@ -24,7 +28,7 @@ kiểu vẫn cần bật/tắt khối tuỳ VRAM của máy:
 | Profile | Service | VRAM | Cần khi nào |
 |---|---|---|---|
 | `app` | qdrant, backend, frontend | ~10 GB (ColQwen) | Mọi bản chạy thật |
-| `worker` | worker | ~6 GB (PaddleOCR + layout) | Khi cần index tài liệu |
+| `worker` | worker | 0, chạy CPU | Khi cần index tài liệu |
 | `vllm` | vllm | ~8 GB (InternVL3-8B) | Khi muốn tự host VLM |
 | `demo` | backend-demo, frontend | 0 | Chỉ xem giao diện |
 | `prod` | caddy | 0 | Server công khai |
@@ -108,7 +112,7 @@ Mọi thứ tự host, tài liệu không rời khỏi máy.
 
 | | |
 |---|---|
-| VRAM tối thiểu | **24 GB** (RTX 4090, A5000) |
+| VRAM tối thiểu | **18 GB** (vLLM ~8 + ColQwen ~10; worker chạy CPU) |
 | Service | qdrant, worker, backend, vllm, frontend |
 | Dùng khi | Tài liệu nhạy cảm, không được gửi ra ngoài |
 
@@ -116,11 +120,10 @@ Phân bổ VRAM:
 ```
 vLLM (InternVL3-8B)      ~8.4 GB   (gpu-memory-utilization 0.35)
 ColQwen 2.5-3B           ~9.5 GB
-PaddleOCR + layout       ~4.5 GB
+PaddleOCR + layout          0      (CPU)
                         ─────────
-                         ~22.4 GB / 24 GB
+                         ~17.9 GB
 ```
-Sát ngưỡng: đừng index sách lớn trong khi có người truy vấn.
 
 Kiểu này tự đặt `DEFAULT_VLM_PROVIDER=builtin`, nên khi service lên đã có sẵn
 một kết nối tên **"vLLM tự host (built-in)"** trỏ vào `http://vllm:8000/v1`.
@@ -145,7 +148,7 @@ Chỉ tự host phần **bắt buộc phải có GPU** (OCR, layout, embedding).
 
 | | |
 |---|---|
-| VRAM tối thiểu | **16 GB** (RTX 4080, A4000) |
+| VRAM tối thiểu | **10 GB** (chỉ ColQwen) |
 | Service | qdrant, worker, backend, frontend |
 | Đánh đổi | Ảnh-mục gửi lên nhà cung cấp API |
 
@@ -167,7 +170,7 @@ nên gửi ra ngoài rẻ và nhanh hơn tự host.
 ### 3. `split` — hai máy, tách theo profile VRAM
 
 ```bash
-# Máy A (GPU nhẹ, 8GB): chỉ xử lý PDF
+# Máy A (không cần GPU): chỉ xử lý PDF
 make deploy-worker-node
 
 # Máy B (GPU mạnh, 16GB+): truy xuất và trả lời
@@ -179,7 +182,7 @@ truy vấn chạy liên tục. Máy A rảnh phần lớn thời gian nên dùng
 
 | Máy | Service | VRAM |
 |---|---|---|
-| A | worker | 8 GB |
+| A | worker | 0, chạy CPU |
 | B | qdrant, backend, frontend, vllm | 24 GB |
 | B (`VLLM=0`) | qdrant, backend, frontend | 16 GB, VLM qua API ngoài |
 

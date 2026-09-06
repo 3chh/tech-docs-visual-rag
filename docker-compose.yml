@@ -1,7 +1,7 @@
 # Cosmo ChatPDF — một file cho mọi kiểu triển khai, chọn bằng profile.
 #
-#   make deploy-hybrid    GPU 16GB, VLM qua API ngoài      <- khuyến nghị
-#   make deploy-full      tất cả tự host, GPU 24GB
+#   make deploy-hybrid    GPU 10GB, VLM qua API ngoài      <- khuyến nghị
+#   make deploy-full      tất cả tự host, GPU 18GB
 #   make deploy-demo      không model, chỉ xem giao diện
 #   make deploy-prod      server công khai, HTTPS
 #
@@ -9,7 +9,7 @@
 # vẫn cần bật/tắt khối tuỳ VRAM của máy:
 #
 #   app     qdrant + backend (ColQwen ~10GB) + frontend
-#   worker  PaddleOCR + PP-DocLayout (~6GB), chỉ cần lúc index
+#   worker  PaddleOCR + PP-DocLayout, chạy CPU, chỉ cần lúc index
 #   vllm    VLM tự host (~8GB), chỉ cần lúc trả lời
 #   demo    backend giả trả dữ liệu mẫu + frontend, 0 GPU
 #   prod    Caddy đứng trước, TLS + xác thực
@@ -52,8 +52,8 @@ services:
     command:
       - --model=${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
       - --served-model-name=${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
-      # Chừa VRAM cho ColQwen (backend) và PaddleOCR (worker) trên cùng GPU.
-      - --gpu-memory-utilization=${VLLM_GPU_MEMORY_UTILIZATION:-0.35}
+      # Chừa VRAM cho ColQwen (~10GB, backend). Worker chạy CPU nên không tranh.
+      - --gpu-memory-utilization=${VLLM_GPU_MEMORY_UTILIZATION:-0.45}
       - --max-model-len=${VLLM_MAX_MODEL_LEN:-8192}
       - --trust-remote-code
       - --host=0.0.0.0
@@ -109,6 +109,10 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # Không cần API key: LLM sửa mục lục do backend giải từ kết nối của bộ
       # tài liệu rồi gửi kèm custom_config trong mỗi lần gọi.
+      #
+      # Paddle chạy CPU nên số luồng quyết định tốc độ index. Để trống là
+      # dùng mặc định của Paddle (thường bằng số core).
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
       interval: 30s

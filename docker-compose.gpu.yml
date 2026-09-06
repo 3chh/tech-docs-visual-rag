@@ -30,5 +30,5 @@ services:
   backend:
     <<: *gpu
 
-  worker:
-    <<: *gpu
+  # worker KHÔNG có ở đây: Paddle chạy CPU (xem backend/Dockerfile.worker).
+  # Nhờ vậy worker chạy được cả trên máy không cài NVIDIA Container Toolkit.
