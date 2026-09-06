@@ -16,16 +16,34 @@ Chia deploy theo đó, không theo "frontend/backend".
 ## Chỉ có hai file compose
 
 Mọi kiểu triển khai nằm trong `docker-compose.yml`, chọn bằng
-[profile của Compose](https://docs.docker.com/compose/how-tos/profiles/):
+[profile của Compose](https://docs.docker.com/compose/how-tos/profiles/).
 
-| Profile | Service được bật |
-|---|---|
-| `full` | qdrant, worker, backend, vllm, frontend |
-| `hybrid` | qdrant, worker, backend, frontend |
-| `gpu-node` | qdrant, backend, frontend |
-| `worker-node` | worker |
-| `demo` | qdrant, backend-demo, frontend |
-| `prod` | caddy (bật kèm `full` hoặc `hybrid`) |
+Profile đặt tên theo **khối tài nguyên**, không theo kiểu deploy — vì cùng một
+kiểu vẫn cần bật/tắt khối tuỳ VRAM của máy:
+
+| Profile | Service | VRAM | Cần khi nào |
+|---|---|---|---|
+| `app` | qdrant, backend, frontend | ~10 GB (ColQwen) | Mọi bản chạy thật |
+| `worker` | worker | ~6 GB (PaddleOCR + layout) | Khi cần index tài liệu |
+| `vllm` | vllm | ~8 GB (InternVL3-8B) | Khi muốn tự host VLM |
+| `demo` | backend-demo, frontend | 0 | Chỉ xem giao diện |
+| `prod` | caddy | 0 | Server công khai |
+
+Kiểu deploy là **tổ hợp** các khối:
+
+| Lệnh | Profile | Service thực tế |
+|---|---|---|
+| `make deploy-full` | `app,worker,vllm` | qdrant, backend, frontend, worker, vllm |
+| `make deploy-hybrid` | `app,worker` | qdrant, backend, frontend, worker |
+| `make deploy-worker-node` | `worker` | worker |
+| `make deploy-gpu-node` | `app,vllm` | qdrant, backend, frontend, vllm |
+| `make deploy-gpu-node VLLM=0` | `app` | qdrant, backend, frontend |
+| `make deploy-demo` | `demo` | backend-demo, frontend |
+| `make deploy-prod` | `app,worker,vllm,prod` | thêm caddy |
+
+Cách đặt tên này giải quyết đúng một tình huống thật: máy B của kiểu `split`
+chỉ có 16GB thì không đủ cho cả ColQwen (~10GB) và vLLM (~8GB), nên phải bỏ
+được khối `vllm` — `make deploy-gpu-node VLLM=0`.
 
 `docker-compose.gpu.yml` là overlay duy nhất còn lại, và nó **buộc phải** là
 file riêng: khối `deploy.resources.reservations.devices` khiến container không
@@ -37,7 +55,7 @@ khối đó, nên cách duy nhất là bỏ hẳn file khi chạy trên máy kh�
 Dùng `make deploy-*` là xong, không cần nhớ profile. Muốn gọi tay:
 
 ```bash
-COMPOSE_PROFILES=hybrid docker compose \
+COMPOSE_PROFILES=app,worker docker compose \
     -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
@@ -133,7 +151,8 @@ truy vấn chạy liên tục. Máy A rảnh phần lớn thời gian nên dùng
 | Máy | Service | VRAM |
 |---|---|---|
 | A | worker | 8 GB |
-| B | qdrant, backend, frontend | 16-24 GB |
+| B | qdrant, backend, frontend, vllm | 24 GB |
+| B (`VLLM=0`) | qdrant, backend, frontend | 16 GB, VLM qua API ngoài |
 
 Máy A phơi cổng worker ra mạng. Nếu không phải mạng nội bộ kín, giới hạn lại:
 `BIND_ADDR=10.0.0.5 make deploy-worker-node`.
@@ -152,7 +171,10 @@ Dùng để xem giao diện, phát triển frontend, hoặc demo cho người kh
 | | |
 |---|---|
 | VRAM | 0 |
-| Service | qdrant, backend-demo, frontend |
+| Service | backend-demo, frontend |
+
+Không dựng qdrant: `demo_server.py` là HTTP server thuần stdlib trả dữ liệu
+mẫu, không nối vector DB nào.
 
 `backend-demo` mang alias mạng `backend` nên `nginx.conf` của frontend không
 phải sửa gì. Đây cũng là kiểu duy nhất không kèm `docker-compose.gpu.yml`.
@@ -196,10 +218,10 @@ BASIC_AUTH_USER=cosmo
 BASIC_AUTH_HASH=$(docker run --rm caddy caddy hash-password --plaintext 'matkhau')
 ```
 
-Mặc định prod chạy trên profile `full`. Muốn dùng VLM API ngoài:
+Mặc định prod chạy trên `app,worker,vllm`. Muốn dùng VLM API ngoài:
 
 ```bash
-make deploy-prod PROD_PROFILE=hybrid
+make deploy-prod PROD_PROFILE=app,worker
 ```
 
 ### Nếu `agent_tung` cần gọi backend

@@ -5,8 +5,22 @@
 #   make deploy-demo      không model, chỉ xem giao diện
 #   make deploy-prod      server công khai, HTTPS
 #
+# Profile đặt theo KHỐI TÀI NGUYÊN, không theo kiểu deploy, vì cùng một kiểu
+# vẫn cần bật/tắt khối tuỳ VRAM của máy:
+#
+#   app     qdrant + backend (ColQwen ~10GB) + frontend
+#   worker  PaddleOCR + PP-DocLayout (~6GB), chỉ cần lúc index
+#   vllm    VLM tự host (~8GB), chỉ cần lúc trả lời
+#   demo    backend giả trả dữ liệu mẫu + frontend, 0 GPU
+#   prod    Caddy đứng trước, TLS + xác thực
+#
+# Kiểu deploy là tổ hợp các khối:
+#   full         app,worker,vllm      hybrid    app,worker
+#   worker-node  worker               gpu-node  app[,vllm]
+#   demo         demo                 prod      thêm ,prod
+#
 # Không dùng Makefile thì gọi trực tiếp:
-#   COMPOSE_PROFILES=hybrid docker compose -f docker-compose.yml \
+#   COMPOSE_PROFILES=app,worker docker compose -f docker-compose.yml \
 #       -f docker-compose.gpu.yml up -d
 #
 # Vì sao GPU vẫn là file riêng: khối `deploy.resources.reservations.devices`
@@ -28,7 +42,7 @@ services:
     image: vllm/vllm-openai:v0.9.2
     container_name: cosmo-vllm
     restart: unless-stopped
-    profiles: ["full"]
+    profiles: ["vllm"]
     ports:
       - "${BIND_ADDR:-0.0.0.0}:${VLLM_PORT:-3333}:8000"
     volumes:
@@ -60,7 +74,7 @@ services:
     image: qdrant/qdrant:v1.12.5
     container_name: cosmo-qdrant
     restart: unless-stopped
-    profiles: ["full", "hybrid", "gpu-node", "demo"]
+    profiles: ["app"]
     ports:
       - "${BIND_ADDR:-0.0.0.0}:${QDRANT_HTTP_PORT:-6333}:6333"
       - "${BIND_ADDR:-0.0.0.0}:${QDRANT_GRPC_PORT:-6334}:6334"
@@ -83,7 +97,7 @@ services:
       dockerfile: Dockerfile.worker
     container_name: cosmo-worker
     restart: unless-stopped
-    profiles: ["full", "hybrid", "worker-node"]
+    profiles: ["worker"]
     ports:
       - "${BIND_ADDR:-0.0.0.0}:${WORKER_PORT:-2222}:8001"
     volumes:
@@ -109,7 +123,7 @@ services:
       dockerfile: Dockerfile
     container_name: cosmo-backend
     restart: unless-stopped
-    profiles: ["full", "hybrid", "gpu-node"]
+    profiles: ["app"]
     ports:
       - "${BIND_ADDR:-0.0.0.0}:${BACKEND_PORT:-2005}:8000"
     volumes:
@@ -139,8 +153,9 @@ services:
       # gpu-node trỏ sang worker ở máy khác bằng biến này.
       PDF_WORKER_ENDPOINT: ${PDF_WORKER_ENDPOINT:-http://worker:8001/upload_pdf/}
 
-      # builtin = tạo sẵn kết nối tới vLLM trong stack. Chỉ profile full có
-      # vLLM; kiểu khác để none và người dùng tự thêm OpenAI/Gemini trên UI.
+      # builtin = tạo sẵn kết nối tới vLLM trong stack. Chỉ đặt khi profile
+      # vllm được bật; nếu không thì để none và người dùng tự thêm kết nối
+      # OpenAI/Gemini trên giao diện.
       DEFAULT_VLM_PROVIDER: ${DEFAULT_VLM_PROVIDER:-none}
       BUILTIN_VLM_ENDPOINT: ${BUILTIN_VLM_ENDPOINT:-http://vllm:8000/v1}
       VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
@@ -183,7 +198,7 @@ services:
       dockerfile: Dockerfile
     container_name: cosmo-frontend
     restart: unless-stopped
-    profiles: ["full", "hybrid", "gpu-node", "demo"]
+    profiles: ["app", "demo"]
     ports:
       - "${BIND_ADDR:-0.0.0.0}:${FRONTEND_PORT:-7860}:7860"
     # Không depends_on backend vì hai lý do: nginx.conf resolve host `backend`
@@ -202,7 +217,7 @@ services:
       retries: 3
 
   # --- Reverse proxy (chỉ prod) --------------------------------------------
-  # Bật kèm profile chính: COMPOSE_PROFILES=full,prod
+  # Bật kèm các khối chính: COMPOSE_PROFILES=app,worker,vllm,prod
   #
   # Lý do quan trọng nhất: Qdrant KHÔNG có xác thực mặc định. Prod đặt
   # BIND_ADDR=127.0.0.1 nên qdrant, backend, worker, vllm chỉ nghe loopback

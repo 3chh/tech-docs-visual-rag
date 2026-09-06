@@ -3,7 +3,7 @@ GPU     := -f docker-compose.gpu.yml
 
 # Lệnh vận hành (down, ps, logs) phải thấy được mọi service bất kể đang chạy
 # kiểu nào, nên bật hết profile.
-ALL_PROFILES := full,hybrid,demo,worker-node,gpu-node,prod
+ALL_PROFILES := app,worker,vllm,demo,prod
 ANY := COMPOSE_PROFILES=$(ALL_PROFILES) $(COMPOSE)
 
 .PHONY: help setup setup-demo build pull-models \
@@ -63,28 +63,42 @@ pull-models: setup
 # DEFAULT_VLM_PROVIDER=builtin: bản này có vLLM trong stack nên tạo sẵn kết
 # nối tới nó, người dùng không phải tự đoán endpoint nội bộ.
 deploy-full: setup
-	COMPOSE_PROFILES=full DEFAULT_VLM_PROVIDER=builtin \
+	COMPOSE_PROFILES=app,worker,vllm DEFAULT_VLM_PROVIDER=builtin \
 		$(COMPOSE) $(GPU) up -d --build
 	@$(MAKE) --no-print-directory _after-up KIND="tất cả tự host (24GB VRAM)"
 
 deploy-hybrid: setup
-	COMPOSE_PROFILES=hybrid $(COMPOSE) $(GPU) up -d --build
+	COMPOSE_PROFILES=app,worker $(COMPOSE) $(GPU) up -d --build
 	@echo ""
 	@echo "vLLM không chạy ở kiểu này. Vào giao diện > Cấu hình > thêm kết nối"
 	@echo "tới OpenAI hoặc Gemini, rồi tạo bộ tài liệu chọn kết nối đó."
 	@$(MAKE) --no-print-directory _after-up KIND="hybrid, VLM qua API ngoài (16GB VRAM)"
 
 deploy-worker-node: setup
-	COMPOSE_PROFILES=worker-node $(COMPOSE) $(GPU) up -d --build
+	COMPOSE_PROFILES=worker $(COMPOSE) $(GPU) up -d --build
 	@echo ""
 	@echo "Máy A đang chạy: chỉ worker xử lý PDF."
 	@echo "Trên máy B chạy:"
 	@echo "  PDF_WORKER_ENDPOINT=http://<ip-may-a>:$${WORKER_PORT:-2222}/upload_pdf/ make deploy-gpu-node"
+	@echo "Máy B chỉ 16GB thì thêm VLLM=0 để dùng VLM qua API ngoài."
+
+# Máy B có tự host VLM hay không. 16GB không đủ cho cả ColQwen (~10GB) và
+# vLLM (~8GB) nên đặt VLLM=0 rồi thêm kết nối OpenAI/Gemini trên giao diện.
+VLLM ?= 1
+ifeq ($(VLLM),0)
+GPU_NODE_PROFILES := app
+GPU_NODE_VLM := none
+else
+GPU_NODE_PROFILES := app,vllm
+GPU_NODE_VLM := builtin
+endif
 
 deploy-gpu-node: setup
 	@test -n "$(PDF_WORKER_ENDPOINT)" || \
 		(echo "Cần PDF_WORKER_ENDPOINT trỏ tới worker ở máy A" && exit 1)
-	COMPOSE_PROFILES=gpu-node PDF_WORKER_ENDPOINT=$(PDF_WORKER_ENDPOINT) \
+	COMPOSE_PROFILES=$(GPU_NODE_PROFILES) \
+		PDF_WORKER_ENDPOINT=$(PDF_WORKER_ENDPOINT) \
+		DEFAULT_VLM_PROVIDER=$(GPU_NODE_VLM) \
 		$(COMPOSE) $(GPU) up -d --build
 	@$(MAKE) --no-print-directory _after-up KIND="máy GPU, worker ở xa"
 
@@ -93,8 +107,10 @@ deploy-demo: setup-demo
 	COMPOSE_PROFILES=demo $(COMPOSE) up -d --build
 	@$(MAKE) --no-print-directory _after-up KIND="demo, không model"
 
-# PROD_PROFILE chọn kiểu chạy bên dưới Caddy: full (tự host VLM) hoặc hybrid.
-PROD_PROFILE ?= full
+# PROD_PROFILE chọn các khối chạy bên dưới Caddy.
+#   app,worker,vllm  tự host VLM (mặc định)
+#   app,worker       VLM qua API ngoài
+PROD_PROFILE ?= app,worker,vllm
 
 deploy-prod: setup
 	@grep -q '^DOMAIN=.\+' .env || \
@@ -102,7 +118,7 @@ deploy-prod: setup
 	COMPOSE_PROFILES=$(PROD_PROFILE),prod BIND_ADDR=127.0.0.1 \
 		$(COMPOSE) $(GPU) up -d --build
 	@echo ""
-	@echo "Đang chạy chế độ production (profile $(PROD_PROFILE),prod)."
+	@echo "Đang chạy chế độ production (khối: $(PROD_PROFILE),prod)."
 	@echo "Chỉ Caddy phơi 80/443. Backend, worker, vllm, qdrant chỉ nghe 127.0.0.1"
 	@echo "của host — debug bằng SSH tunnel, không vào được từ Internet."
 

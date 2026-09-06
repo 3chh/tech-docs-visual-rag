@@ -223,7 +223,8 @@ cosmo-chatpdf/
 ```
 
 Chỉ hai file compose: `docker-compose.yml` chứa mọi kiểu triển khai và chọn
-bằng profile (`full`, `hybrid`, `gpu-node`, `worker-node`, `demo`, `prod`).
+bằng profile theo khối tài nguyên (`app`, `worker`, `vllm`, `demo`, `prod`) —
+kiểu deploy là tổ hợp các khối, ví dụ `full` = `app,worker,vllm`.
 File GPU phải riêng vì khối cấp GPU làm container không khởi động nổi trên máy
 chưa cài NVIDIA Container Toolkit. Xem [deploy/README.md](deploy/README.md).
 
