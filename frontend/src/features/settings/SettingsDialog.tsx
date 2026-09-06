@@ -27,6 +27,7 @@ import {
   SettingGroup,
 } from "./SettingRow";
 import type { StoredSettings } from "./types";
+import { VlmProviderSection } from "./VlmProviderSection";
 
 export interface SettingsDialogProps {
   settings?: StoredSettings;
@@ -122,7 +123,14 @@ export function SettingsDialog({
               <>
                 {/* Tab 1: Mô hình AI */}
                 <TabsContent value="models" className="m-0 space-y-4">
-                  <SettingGroup title="Mô hình Đọc ảnh & Suy luận (VLM)">
+                  <SettingGroup title="Chọn nguồn model trả lời">
+                    <VlmProviderSection
+                      providers={data?.models.vlm_providers ?? []}
+                      defaultProvider={data?.models.default_vlm_provider ?? "builtin"}
+                    />
+                  </SettingGroup>
+
+                  <SettingGroup title="Chi tiết mô hình đang dùng">
                     <LockedSetting
                       label="Mô hình VLM phục vụ"
                       value={vlm?.model_name ?? "Qwen2-VL-7B-Instruct"}

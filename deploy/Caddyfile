@@ -1,0 +1,43 @@
+# Caddy đứng trước toàn bộ stack: TLS, xác thực, và là cổng duy nhất ra ngoài.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	# Chứng chỉ Let's Encrypt tự động, tự gia hạn.
+
+	# Xác thực cơ bản cho toàn site. Đổi sang forward_auth nếu đã có SSO.
+	basic_auth {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+
+	# Frontend là static file do nginx trong container phục vụ; nginx đó tự
+	# proxy /api sang backend nên ở đây chỉ cần một upstream.
+	reverse_proxy frontend:7860 {
+		# Index sách vài trăm trang và một lượt truy vấn đều rất lâu.
+		transport http {
+			read_timeout 3600s
+			write_timeout 3600s
+		}
+	}
+
+	request_body {
+		max_size 512MB
+	}
+
+	encode gzip zstd
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

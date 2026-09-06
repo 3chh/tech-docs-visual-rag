@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ...core.config import get_settings
 from ...core.logging import get_logger
+from ...core.providers import VlmProvider, get_vlm_provider
 from ...prompts.rag_prompts import (
     build_toc_rewrite_prompt,
     rag_prompt,
@@ -36,10 +37,12 @@ def _encode_image(image_path: str) -> str | None:
 
 
 class RagService:
-    def __init__(self, collection: str):
+    def __init__(self, collection: str, provider_id: str | None = None):
         self.settings = get_settings()
         self.collection = collection
         self.retrieval = RetrievalService(collection)
+        # Provider chọn lúc gọi; key luôn đọc từ env phía server.
+        self.provider: VlmProvider = get_vlm_provider(provider_id)
         self._client = None
 
     @property
@@ -49,8 +52,8 @@ class RagService:
             from openai import OpenAI
 
             self._client = OpenAI(
-                base_url=self.settings.vlm.endpoint,
-                api_key=self.settings.vlm.api_key or "EMPTY",
+                base_url=self.provider.endpoint,
+                api_key=self.provider.api_key or "EMPTY",
             )
         return self._client
 
@@ -88,7 +91,7 @@ class RagService:
             kwargs["temperature"] = temperature
 
         response = self.client.chat.completions.create(
-            model=self.settings.vlm.model_name,
+            model=self.provider.model_name,
             messages=messages,
             **kwargs,
         )
@@ -160,11 +163,24 @@ class RagService:
                 "answer": "Không tìm thấy mục nào phù hợp trong bộ tài liệu này.",
                 "rewritten_query": rewritten,
                 "payloads": [],
+                "provider": self.provider.id,
+                "model_name": self.provider.model_name,
             }
 
         answer = self._ask_vlm(
             query, image_paths, system_prompt or rag_prompt, vlm_temperature
         )
-        logger.info("Đã sinh câu trả lời (%d ký tự) từ %d mục", len(answer), len(image_paths))
+        logger.info(
+            "Đã sinh câu trả lời (%d ký tự) từ %d mục bằng %s",
+            len(answer),
+            len(image_paths),
+            self.provider.label,
+        )
 
-        return {"answer": answer, "rewritten_query": rewritten, "payloads": payloads}
+        return {
+            "answer": answer,
+            "rewritten_query": rewritten,
+            "payloads": payloads,
+            "provider": self.provider.id,
+            "model_name": self.provider.model_name,
+        }

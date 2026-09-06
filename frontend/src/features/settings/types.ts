@@ -51,6 +51,8 @@ export interface ProcessingOverrides {
 export interface AskOverrides {
   topK: number;
   useTocRewrite: boolean;
+  /** builtin | openai | gemini | custom. Bỏ trống thì dùng mặc định server. */
+  vlmProvider?: string;
   tocPreviewLimit?: number;
   vlmTemperature?: number;
   systemPrompt?: string;

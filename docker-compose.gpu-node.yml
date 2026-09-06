@@ -1,0 +1,18 @@
+# Kiểu SPLIT, máy B: truy xuất và trả lời.
+#
+#   BACKEND_WORKER_URL=http://may-a:2222/upload_pdf/ make deploy-gpu-node
+#
+# Máy này chạy liên tục để phục vụ truy vấn.
+
+services:
+  worker:
+    deploy:
+      replicas: 0
+
+  backend:
+    environment:
+      # Trỏ sang worker ở máy A thay vì worker nội bộ.
+      PDF_WORKER_ENDPOINT: ${BACKEND_WORKER_URL:?Đặt BACKEND_WORKER_URL trỏ tới worker máy A}
+    depends_on:
+      qdrant:
+        condition: service_healthy

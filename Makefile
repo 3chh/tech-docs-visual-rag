@@ -1,129 +1,152 @@
-COMPOSE      := docker compose
-COMPOSE_GPU  := docker compose -f docker-compose.yml -f docker-compose.gpu.yml
-COMPOSE_EXT  := docker compose -f docker-compose.yml -f docker-compose.external-vlm.yml -f docker-compose.gpu.yml
-COMPOSE_UI   := docker compose -f docker-compose.yml -f docker-compose.ui-only.yml
+COMPOSE   := docker compose
+BASE      := -f docker-compose.yml
+GPU       := -f docker-compose.gpu.yml
 
-.PHONY: help setup setup-ui build build-ui up up-ui up-gpu up-external-vlm down restart \
-        logs logs-vllm logs-backend logs-frontend ps health pull-models test lint clean clean-all
+C_FULL    := $(COMPOSE) $(BASE) $(GPU)
+C_HYBRID  := $(COMPOSE) $(BASE) -f docker-compose.hybrid.yml $(GPU)
+C_WORKER  := $(COMPOSE) $(BASE) -f docker-compose.worker-node.yml $(GPU)
+C_GPUNODE := $(COMPOSE) $(BASE) -f docker-compose.gpu-node.yml $(GPU)
+C_DEMO    := $(COMPOSE) $(BASE) -f docker-compose.demo.yml
+C_PROD    := $(COMPOSE) $(BASE) -f docker-compose.prod.yml $(GPU)
+
+.PHONY: help setup setup-demo build pull-models \
+        deploy-full deploy-hybrid deploy-worker-node deploy-gpu-node deploy-demo deploy-prod \
+        down restart ps health logs logs-vllm logs-backend logs-worker logs-frontend \
+        test lint clean clean-all
 
 help:
 	@echo "Cosmo ChatPDF"
 	@echo ""
-	@echo "  Chạy"
-	@echo "    make up-ui            Chỉ giao diện + Qdrant, KHÔNG cần GPU/model"
-	@echo "    make up-gpu           Lên toàn bộ stack với GPU  <- chạy thật"
-	@echo "    make up               Lên stack không cấp GPU (model sẽ rất chậm)"
-	@echo "    make up-external-vlm  Lên stack, dùng VLM host sẵn ở nơi khác"
-	@echo "    make down             Dừng"
-	@echo "    make restart          Khởi động lại"
+	@echo "  TRIỂN KHAI (xem deploy/README.md để chọn kiểu)"
+	@echo "    make deploy-hybrid       GPU 16GB, VLM dùng API ngoài    <- khuyến nghị"
+	@echo "    make deploy-full         Tất cả tự host, cần GPU 24GB"
+	@echo "    make deploy-demo         Không model, chỉ xem giao diện"
+	@echo "    make deploy-prod         Server công khai, HTTPS + xác thực"
 	@echo ""
-	@echo "  Theo dõi"
-	@echo "    make ps               Trạng thái service"
-	@echo "    make health           Kiểm tra tất cả endpoint"
-	@echo "    make logs             Log tất cả"
-	@echo "    make logs-vllm        Log vLLM (xem tiến trình tải model)"
-	@echo "    make logs-backend     Log backend"
+	@echo "    make deploy-worker-node  Máy A: chỉ xử lý PDF (8GB)"
+	@echo "    make deploy-gpu-node     Máy B: truy xuất và trả lời (16GB+)"
 	@echo ""
-	@echo "  Chuẩn bị"
-	@echo "    make setup            Tạo .env từ .env.example"
-	@echo "    make pull-models      Tải model trước khi chạy"
-	@echo "    make build            Build image"
+	@echo "  VẬN HÀNH"
+	@echo "    make down  make restart  make ps  make health"
+	@echo "    make logs  make logs-vllm  make logs-backend  make logs-worker"
 	@echo ""
-	@echo "  Phát triển"
-	@echo "    make test             Chạy test (không cần GPU)"
-	@echo "    make lint             Kiểm tra code style"
-	@echo "    make clean            Xoá container, giữ model đã tải"
-	@echo "    make clean-all        Xoá tất cả kể cả model"
+	@echo "  CHUẨN BỊ"
+	@echo "    make setup               Tạo .env từ mẫu"
+	@echo "    make pull-models         Tải model trước cho khỏi chờ"
+	@echo "    make build               Build image"
+	@echo ""
+	@echo "  PHÁT TRIỂN"
+	@echo "    make test  make lint  make clean  make clean-all"
 	@echo ""
 	@echo "  Cổng: vLLM 3333 | backend 2005 | worker 2222 | qdrant 6333 | UI 7860"
 
+# --- Chuẩn bị -----------------------------------------------------------
+
 setup:
 	@test -f .env || (cp .env.example .env && \
-		echo "Đã tạo .env — hãy điền GEMINI_API_KEY trước khi chạy")
+		echo "Đã tạo .env — điền GEMINI_API_KEY trước khi chạy")
 	@grep -q '^GEMINI_API_KEY=.\+' .env || \
 		(echo "GEMINI_API_KEY còn trống trong .env" && exit 1)
 
-# Chế độ chỉ-UI không gọi model nào nên không cần API key.
-setup-ui:
+# Demo không gọi model nào nên không cần key.
+setup-demo:
 	@test -f .env || cp .env.example .env
 
 build:
-	$(COMPOSE) build
+	$(COMPOSE) $(BASE) build
 
-build-ui:
-	$(COMPOSE_UI) build frontend
+pull-models: setup
+	@bash scripts/pull_models.sh
 
-up: setup
-	$(COMPOSE) up -d
-	@$(MAKE) --no-print-directory _after-up
+# --- Triển khai ---------------------------------------------------------
 
-up-ui: setup-ui
-	$(COMPOSE_UI) up -d --build
+deploy-full: setup
+	$(C_FULL) up -d --build
+	@$(MAKE) --no-print-directory _after-up KIND="tất cả tự host (24GB VRAM)"
+
+deploy-hybrid: setup
+	@grep -qE '^DEFAULT_VLM_PROVIDER=(openai|gemini|custom)' .env || \
+		(echo "Kiểu hybrid cần DEFAULT_VLM_PROVIDER=gemini (hoặc openai/custom) trong .env" && exit 1)
+	$(C_HYBRID) up -d --build
+	@$(MAKE) --no-print-directory _after-up KIND="hybrid, VLM qua API ngoài (16GB VRAM)"
+
+deploy-worker-node: setup
+	$(C_WORKER) up -d --build
 	@echo ""
-	@echo "Chỉ giao diện + Qdrant. Backend không chạy nên UI sẽ hiện"
-	@echo "banner 'backend không kết nối được' — đúng như mong đợi."
+	@echo "Máy A đang chạy: chỉ worker xử lý PDF."
+	@echo "Trên máy B chạy:"
+	@echo "  BACKEND_WORKER_URL=http://<ip-may-a>:$${WORKER_PORT:-2222}/upload_pdf/ make deploy-gpu-node"
+
+deploy-gpu-node: setup
+	@test -n "$(BACKEND_WORKER_URL)" || \
+		(echo "Cần BACKEND_WORKER_URL trỏ tới worker ở máy A" && exit 1)
+	$(C_GPUNODE) up -d --build
+	@$(MAKE) --no-print-directory _after-up KIND="máy GPU, worker ở xa"
+
+deploy-demo: setup-demo
+	$(C_DEMO) up -d --build
+	@$(MAKE) --no-print-directory _after-up KIND="demo, không model"
+
+deploy-prod: setup
+	@grep -q '^DOMAIN=.\+' .env || \
+		(echo "Cần DOMAIN trong .env để xin chứng chỉ TLS" && exit 1)
+	$(C_PROD) up -d --build
 	@echo ""
-	@echo "  Giao diện: http://localhost:$${FRONTEND_PORT:-7860}"
-	@echo "  Qdrant:    http://localhost:$${QDRANT_HTTP_PORT:-6333}/dashboard"
-
-up-gpu: setup
-	$(COMPOSE_GPU) up -d
-	@$(MAKE) --no-print-directory _after-up
-
-up-external-vlm: setup
-	$(COMPOSE_EXT) up -d
-	@$(MAKE) --no-print-directory _after-up
+	@echo "Đang chạy chế độ production."
+	@echo "Chỉ cổng 80/443 phơi ra ngoài; backend, worker, vllm, qdrant nằm trong network nội bộ."
 
 _after-up:
 	@echo ""
-	@echo "Đang khởi động. Lần đầu mất 15-30 phút để tải model."
-	@echo ""
-	@echo "  make logs-vllm    theo dõi tải model"
-	@echo "  make health       kiểm tra khi xong"
+	@echo "Kiểu triển khai: $(KIND)"
+	@echo "Lần đầu mất 15-30 phút để tải model. Theo dõi: make logs-vllm"
 	@echo ""
 	@echo "  Giao diện: http://localhost:$${FRONTEND_PORT:-7860}"
 
+# --- Vận hành -----------------------------------------------------------
+
 down:
-	$(COMPOSE) down
+	$(COMPOSE) $(BASE) down
 
 restart:
-	$(COMPOSE) restart
-
-logs:
-	$(COMPOSE) logs -f
-
-logs-vllm:
-	$(COMPOSE) logs -f vllm
-
-logs-backend:
-	$(COMPOSE) logs -f backend
+	$(COMPOSE) $(BASE) restart
 
 ps:
-	$(COMPOSE) ps
+	$(COMPOSE) $(BASE) ps
 
 health:
-	@echo "vLLM     $$(curl -fsS -o /dev/null -w '%{http_code}' http://localhost:$${VLLM_PORT:-3333}/v1/models 2>/dev/null || echo 'không phản hồi')"
-	@echo "backend  $$(curl -fsS -o /dev/null -w '%{http_code}' http://localhost:$${BACKEND_PORT:-2005}/health 2>/dev/null || echo 'không phản hồi')"
-	@echo "worker   $$(curl -fsS -o /dev/null -w '%{http_code}' http://localhost:$${WORKER_PORT:-2222}/health 2>/dev/null || echo 'không phản hồi')"
-	@echo "qdrant   $$(curl -fsS -o /dev/null -w '%{http_code}' http://localhost:$${QDRANT_HTTP_PORT:-6333}/healthz 2>/dev/null || echo 'không phản hồi')"
-	@echo "frontend $$(curl -fsS -o /dev/null -w '%{http_code}' http://localhost:$${FRONTEND_PORT:-7860}/ 2>/dev/null || echo 'không phản hồi')"
+	@printf "vLLM     "; curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:$${VLLM_PORT:-3333}/v1/models 2>/dev/null || echo "không chạy"
+	@printf "backend  "; curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:$${BACKEND_PORT:-2005}/health 2>/dev/null || echo "không chạy"
+	@printf "worker   "; curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:$${WORKER_PORT:-2222}/health 2>/dev/null || echo "không chạy"
+	@printf "qdrant   "; curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:$${QDRANT_HTTP_PORT:-6333}/healthz 2>/dev/null || echo "không chạy"
+	@printf "frontend "; curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:$${FRONTEND_PORT:-7860}/ 2>/dev/null || echo "không chạy"
 
-# Tải model vào volume trước để container không phải chờ lúc khởi động.
-pull-models: setup
-	@bash scripts/pull_models.sh
+logs:
+	$(COMPOSE) $(BASE) logs -f
+
+logs-vllm:
+	$(COMPOSE) $(BASE) logs -f vllm
+
+logs-backend:
+	$(COMPOSE) $(BASE) logs -f backend
+
+logs-worker:
+	$(COMPOSE) $(BASE) logs -f worker
+
+logs-frontend:
+	$(COMPOSE) $(BASE) logs -f frontend
+
+# --- Phát triển ---------------------------------------------------------
 
 test:
 	pytest
 
 lint:
-	ruff check backend frontend
+	ruff check backend
+	cd frontend && npx tsc -b
 
 clean:
-	$(COMPOSE) down
+	$(COMPOSE) $(BASE) down
 
 clean-all:
-	$(COMPOSE) down -v
-	@echo "Đã xoá cả model đã tải — lần chạy sau phải tải lại."
-
-logs-frontend:
-	$(COMPOSE) logs -f frontend
+	$(COMPOSE) $(BASE) down -v
+	@echo "Đã xoá cả model đã tải — lần sau phải tải lại."

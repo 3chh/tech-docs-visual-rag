@@ -140,11 +140,21 @@ services:
 
       PDF_WORKER_ENDPOINT: http://worker:8001/upload_pdf/
 
+      # VLM: người dùng chọn provider trên giao diện, key luôn ở server.
+      DEFAULT_VLM_PROVIDER: ${DEFAULT_VLM_PROVIDER:-builtin}
       VLM_TYPE: openai
       VLM_ENDPOINT: http://vllm:8000/v1
       VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
+      OPENAI_CLOUD_API_KEY: ${OPENAI_CLOUD_API_KEY:-}
+      OPENAI_VLM_MODEL: ${OPENAI_VLM_MODEL:-gpt-4o}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_VLM_MODEL: ${GEMINI_VLM_MODEL:-gemini-2.0-flash}
+      CUSTOM_VLM_ENDPOINT: ${CUSTOM_VLM_ENDPOINT:-}
+      CUSTOM_VLM_API_KEY: ${CUSTOM_VLM_API_KEY:-}
+      CUSTOM_VLM_MODEL: ${CUSTOM_VLM_MODEL:-}
+      # Mã hoá at-rest cho key người dùng nhập trên giao diện.
+      CREDENTIALS_SECRET: ${CREDENTIALS_SECRET:-}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 30s

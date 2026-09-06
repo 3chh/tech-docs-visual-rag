@@ -2,6 +2,7 @@
 
 import type {
   AskResponse,
+  CredentialListResponse,
   HealthResponse,
   SearchResponse,
   SettingsResponse,
@@ -82,6 +83,33 @@ export const api = {
     return request<SettingsResponse>("/settings");
   },
 
+  /** Provider nào đã có key, kèm bản che. Không bao giờ trả key gốc. */
+  credentials(): Promise<CredentialListResponse> {
+    return request<CredentialListResponse>("/credentials");
+  },
+
+  /** Lưu key cho một provider. Key chỉ đi một chiều lên server. */
+  saveCredential(
+    providerId: string,
+    payload: { apiKey: string; modelName?: string; endpoint?: string },
+  ): Promise<CredentialListResponse> {
+    return request<CredentialListResponse>(`/credentials/${providerId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: payload.apiKey,
+        model_name: payload.modelName,
+        endpoint: payload.endpoint,
+      }),
+    });
+  },
+
+  deleteCredential(providerId: string): Promise<CredentialListResponse> {
+    return request<CredentialListResponse>(`/credentials/${providerId}`, {
+      method: "DELETE",
+    });
+  },
+
   listCollections(userId: string): Promise<string[]> {
     return request<{ collections: string[] }>(
       `/list_collections/${encodeURIComponent(userId)}`,
@@ -100,6 +128,7 @@ export const api = {
     systemPrompt?: string;
     tocPreviewLimit?: number;
     vlmTemperature?: number;
+    vlmProvider?: string;
   }): Promise<AskResponse> {
     return postJson<AskResponse>(
       "/ask",
@@ -112,6 +141,7 @@ export const api = {
         include_base64: true,
         toc_preview_limit: params.tocPreviewLimit,
         vlm_temperature: params.vlmTemperature,
+        vlm_provider: params.vlmProvider,
       },
       SEARCH_TIMEOUT_MS,
     );

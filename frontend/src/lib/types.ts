@@ -85,6 +85,9 @@ export interface AskResponse {
   rewritten_query: string | null;
   sources: SearchResult[];
   total_sources: number;
+  /** Model nào đã trả lời, để người dùng biết câu trả lời đến từ đâu. */
+  provider?: string | null;
+  model_name?: string | null;
 }
 
 /** Một lượt hỏi đáp trong phiên tra cứu. */
@@ -189,9 +192,43 @@ export interface SettingsResponse {
   runtime: RuntimeSettings;
   document: DocumentSettings;
   indexing: IndexingSettings;
-  models: { vlm: ModelEndpoint; llm: ModelEndpoint };
+  models: {
+    vlm: ModelEndpoint;
+    llm: ModelEndpoint;
+    vlm_providers: VlmProviderOut[];
+    default_vlm_provider: string;
+  };
   data_dir: string;
   metadata_dir: string;
   log_level: string;
   editable_note: string;
+}
+
+export interface VlmProviderOut {
+  id: string;
+  label: string;
+  model_name: string;
+  endpoint: string;
+  description: string;
+  /** Provider này có cần GPU trên máy bạn không. */
+  needs_gpu: boolean;
+  /** Đã có API key ở server chưa. Key không bao giờ gửi ra client. */
+  is_configured: boolean;
+}
+
+export interface CredentialStatus {
+  provider_id: string;
+  is_configured: boolean;
+  /** Bản che, ví dụ `sk-proj-••••4f2a`. Không bao giờ là key gốc. */
+  masked_key: string | null;
+  key_source: string;
+  can_delete: boolean;
+  model_name: string | null;
+  endpoint: string | null;
+}
+
+export interface CredentialListResponse {
+  credentials: CredentialStatus[];
+  /** Key trên đĩa có được mã hoá không. */
+  encryption_enabled: boolean;
 }
