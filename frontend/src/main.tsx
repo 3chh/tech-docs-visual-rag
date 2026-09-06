@@ -7,6 +7,7 @@ import { TooltipProvider } from "./components/ui/tooltip";
 import { AuthProvider } from "./features/auth";
 import { I18nProvider } from "./lib/i18n";
 import "./index.css";
+import "katex/dist/katex.min.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {

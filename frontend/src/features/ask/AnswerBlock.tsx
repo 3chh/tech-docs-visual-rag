@@ -1,6 +1,7 @@
 import { AlertCircle, FileSearch, Search, Wand2 } from "lucide-react";
 
 import { PageBadge, SectionHeading } from "@/components/common";
+import { MarkdownMessage } from "@/components/common/MarkdownMessage";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AskTurn, SearchResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -30,9 +31,7 @@ export function AnswerBlock({
         <div className="space-y-3.5">
           {turn.rewrittenQuery && <RewriteNote rewritten={turn.rewrittenQuery} />}
 
-          <div className="whitespace-pre-wrap text-[15px] leading-relaxed">
-            {turn.answer}
-          </div>
+          <MarkdownMessage content={turn.answer} />
 
           {turn.sources.length > 0 && (
             <div className="space-y-2">
