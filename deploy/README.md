@@ -39,11 +39,40 @@ Kiểu deploy là **tổ hợp** các khối:
 | `make deploy-gpu-node` | `app,vllm` | qdrant, backend, frontend, vllm |
 | `make deploy-gpu-node VLLM=0` | `app` | qdrant, backend, frontend |
 | `make deploy-demo` | `demo` | backend-demo, frontend |
-| `make deploy-prod` | `app,worker,vllm,prod` | thêm caddy |
 
 Cách đặt tên này giải quyết đúng một tình huống thật: máy B của kiểu `split`
 chỉ có 16GB thì không đủ cho cả ColQwen (~10GB) và vLLM (~8GB), nên phải bỏ
 được khối `vllm` — `make deploy-gpu-node VLLM=0`.
+
+### `prod` là lớp bọc, không phải một kiểu
+
+Hai chiều độc lập nhau:
+
+| | |
+|---|---|
+| **Khối nào chạy** | full / hybrid / worker-node / gpu-node / demo |
+| **Phơi ra đâu** | `PUBLIC=0` mặc định, hay `PUBLIC=1` |
+
+`PUBLIC=1` thêm khối `prod` (Caddy ở 80/443) và đặt `BIND_ADDR=127.0.0.1`.
+Vì là lớp bọc nên nó là **flag**, ghép được với kiểu nào có giao diện:
+
+```bash
+make deploy-full PUBLIC=1        # tự host tất cả, ra Internet
+make deploy-hybrid PUBLIC=1      # VLM API ngoài, ra Internet
+make deploy-gpu-node PUBLIC=1 VLLM=0 PDF_WORKER_ENDPOINT=...
+make deploy-demo PUBLIC=1        # demo cho khách xem qua HTTPS
+make deploy-prod                 # = deploy-full PUBLIC=1
+```
+
+Không áp cho `deploy-worker-node`: máy A không phục vụ giao diện nên Caddy
+không có gì để proxy.
+
+**Vì sao không gộp `PUBLIC=1` thành mặc định:** `deploy/Caddyfile` dùng
+`{$DOMAIN}` làm site block, nên bắt buộc phải có domain công khai và DNS trỏ
+về máy để Let's Encrypt cấp được chứng chỉ. Máy local không có thứ đó — gộp
+vào thì mỗi lần chạy thử trên laptop cũng đòi domain thật. Ngoài ra
+`BIND_ADDR=127.0.0.1` sẽ làm `agent_tung` ở máy khác mất đường gọi cổng 2005
+và 3333.
 
 `docker-compose.gpu.yml` là overlay duy nhất còn lại, và nó **buộc phải** là
 file riêng: khối `deploy.resources.reservations.devices` khiến container không
@@ -200,10 +229,11 @@ Chỉ muốn xem giao diện: `demo`.
 `0.0.0.0`, trong đó Qdrant **không có xác thực**.
 
 ```bash
-make deploy-prod
+make deploy-prod                 # tự host VLM
+make deploy-hybrid PUBLIC=1      # VLM qua API ngoài
 ```
 
-Nó làm ba việc:
+`PUBLIC=1` làm ba việc:
 1. Đặt `BIND_ADDR=127.0.0.1`, nên qdrant, worker, backend, vllm chỉ nghe
    loopback của host — vào được bằng SSH tunnel để debug, không vào được từ
    Internet
@@ -218,10 +248,10 @@ BASIC_AUTH_USER=cosmo
 BASIC_AUTH_HASH=$(docker run --rm caddy caddy hash-password --plaintext 'matkhau')
 ```
 
-Mặc định prod chạy trên `app,worker,vllm`. Muốn dùng VLM API ngoài:
+`make deploy-prod` là `deploy-full PUBLIC=1`. Muốn dùng VLM API ngoài:
 
 ```bash
-make deploy-prod PROD_PROFILE=app,worker
+make deploy-hybrid PUBLIC=1
 ```
 
 ### Nếu `agent_tung` cần gọi backend

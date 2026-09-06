@@ -9,7 +9,7 @@ ANY := COMPOSE_PROFILES=$(ALL_PROFILES) $(COMPOSE)
 .PHONY: help setup setup-demo build pull-models \
         deploy-full deploy-hybrid deploy-worker-node deploy-gpu-node deploy-demo deploy-prod \
         down restart ps health logs logs-vllm logs-backend logs-worker logs-frontend \
-        config test lint clean clean-all
+        config test lint clean clean-all _check-public _after-up
 
 help:
 	@echo "Cosmo ChatPDF"
@@ -18,10 +18,17 @@ help:
 	@echo "    make deploy-hybrid       GPU 16GB, VLM dùng API ngoài    <- khuyến nghị"
 	@echo "    make deploy-full         Tất cả tự host, cần GPU 24GB"
 	@echo "    make deploy-demo         Không model, chỉ xem giao diện"
-	@echo "    make deploy-prod         Server công khai, HTTPS + xác thực"
 	@echo ""
 	@echo "    make deploy-worker-node  Máy A: chỉ xử lý PDF (8GB)"
-	@echo "    make deploy-gpu-node     Máy B: truy xuất và trả lời (16GB+)"
+	@echo "    make deploy-gpu-node     Máy B: truy xuất và trả lời (24GB)"
+	@echo "      thêm VLLM=0            Máy B chỉ 16GB, VLM qua API ngoài"
+	@echo ""
+	@echo "  ĐƯA RA INTERNET — thêm PUBLIC=1 vào kiểu có giao diện"
+	@echo "    make deploy-full PUBLIC=1     Caddy + HTTPS + xác thực"
+	@echo "    make deploy-hybrid PUBLIC=1   dùng được cho cả gpu-node, demo"
+	@echo "    make deploy-prod              (= deploy-full PUBLIC=1)"
+	@echo "    Cần DOMAIN và BASIC_AUTH_HASH trong .env"
+	@echo "    Không áp cho deploy-worker-node: máy A không phục vụ giao diện"
 	@echo ""
 	@echo "  VẬN HÀNH"
 	@echo "    make down  make restart  make ps  make health  make config"
@@ -57,18 +64,37 @@ pull-models: setup
 
 # --- Triển khai ---------------------------------------------------------
 #
-# Mỗi kiểu là một profile. Chỉ khác nhau ở tên profile, vài biến, và có kèm
-# docker-compose.gpu.yml hay không.
+# Kiểu deploy = tổ hợp khối tài nguyên. Hai chiều độc lập nhau:
+#
+#   CHIỀU 1, khối nào chạy:  full / hybrid / worker-node / gpu-node / demo
+#   CHIỀU 2, phơi ra đâu:    PUBLIC=0 (mặc định) hay PUBLIC=1
+#
+# PUBLIC=1 thêm Caddy ở 80/443 và đẩy mọi cổng khác về loopback. Nó là lớp
+# bọc, không phải một kiểu riêng — nên là flag chứ không phải target: bất kỳ
+# kiểu nào cũng bọc được, `make deploy-hybrid PUBLIC=1` chẳng hạn.
+#
+# Không gộp PUBLIC=1 thành mặc định được: Caddyfile dùng $$DOMAIN làm site
+# block nên bắt buộc có domain công khai + DNS trỏ về máy để Let's Encrypt
+# cấp cert. Máy local không có thứ đó.
+
+PUBLIC ?= 0
+ifeq ($(PUBLIC),1)
+HARDEN := ,prod
+BIND    := BIND_ADDR=127.0.0.1
+else
+HARDEN :=
+BIND    :=
+endif
 
 # DEFAULT_VLM_PROVIDER=builtin: bản này có vLLM trong stack nên tạo sẵn kết
 # nối tới nó, người dùng không phải tự đoán endpoint nội bộ.
-deploy-full: setup
-	COMPOSE_PROFILES=app,worker,vllm DEFAULT_VLM_PROVIDER=builtin \
+deploy-full: setup _check-public
+	COMPOSE_PROFILES=app,worker,vllm$(HARDEN) DEFAULT_VLM_PROVIDER=builtin $(BIND) \
 		$(COMPOSE) $(GPU) up -d --build
 	@$(MAKE) --no-print-directory _after-up KIND="tất cả tự host (24GB VRAM)"
 
-deploy-hybrid: setup
-	COMPOSE_PROFILES=app,worker $(COMPOSE) $(GPU) up -d --build
+deploy-hybrid: setup _check-public
+	COMPOSE_PROFILES=app,worker$(HARDEN) $(BIND) $(COMPOSE) $(GPU) up -d --build
 	@echo ""
 	@echo "vLLM không chạy ở kiểu này. Vào giao diện > Cấu hình > thêm kết nối"
 	@echo "tới OpenAI hoặc Gemini, rồi tạo bộ tài liệu chọn kết nối đó."
@@ -93,41 +119,51 @@ GPU_NODE_PROFILES := app,vllm
 GPU_NODE_VLM := builtin
 endif
 
-deploy-gpu-node: setup
+deploy-gpu-node: setup _check-public
 	@test -n "$(PDF_WORKER_ENDPOINT)" || \
 		(echo "Cần PDF_WORKER_ENDPOINT trỏ tới worker ở máy A" && exit 1)
-	COMPOSE_PROFILES=$(GPU_NODE_PROFILES) \
+	COMPOSE_PROFILES=$(GPU_NODE_PROFILES)$(HARDEN) \
 		PDF_WORKER_ENDPOINT=$(PDF_WORKER_ENDPOINT) \
-		DEFAULT_VLM_PROVIDER=$(GPU_NODE_VLM) \
+		DEFAULT_VLM_PROVIDER=$(GPU_NODE_VLM) $(BIND) \
 		$(COMPOSE) $(GPU) up -d --build
 	@$(MAKE) --no-print-directory _after-up KIND="máy GPU, worker ở xa"
 
 # Không kèm $(GPU): demo chạy được trên máy không có NVIDIA toolkit.
-deploy-demo: setup-demo
-	COMPOSE_PROFILES=demo $(COMPOSE) up -d --build
+deploy-demo: setup-demo _check-public
+	COMPOSE_PROFILES=demo$(HARDEN) $(BIND) $(COMPOSE) up -d --build
 	@$(MAKE) --no-print-directory _after-up KIND="demo, không model"
 
-# PROD_PROFILE chọn các khối chạy bên dưới Caddy.
-#   app,worker,vllm  tự host VLM (mặc định)
-#   app,worker       VLM qua API ngoài
-PROD_PROFILE ?= app,worker,vllm
-
-deploy-prod: setup
+# Kiểm điều kiện của PUBLIC=1 trước khi build, thay vì để Caddy fail sau
+# 20 phút build image.
+_check-public:
+ifeq ($(PUBLIC),1)
 	@grep -q '^DOMAIN=.\+' .env || \
-		(echo "Cần DOMAIN trong .env để xin chứng chỉ TLS" && exit 1)
-	COMPOSE_PROFILES=$(PROD_PROFILE),prod BIND_ADDR=127.0.0.1 \
-		$(COMPOSE) $(GPU) up -d --build
-	@echo ""
-	@echo "Đang chạy chế độ production (khối: $(PROD_PROFILE),prod)."
-	@echo "Chỉ Caddy phơi 80/443. Backend, worker, vllm, qdrant chỉ nghe 127.0.0.1"
-	@echo "của host — debug bằng SSH tunnel, không vào được từ Internet."
+		(echo "PUBLIC=1 cần DOMAIN trong .env để xin chứng chỉ TLS" && exit 1)
+	@grep -q '^BASIC_AUTH_HASH=.\+' .env || \
+		(echo "PUBLIC=1 cần BASIC_AUTH_HASH. Sinh bằng:" && \
+		 echo "  docker run --rm caddy caddy hash-password --plaintext 'matkhau'" && exit 1)
+endif
+
+# Giữ tên cũ cho khỏi phải sửa tài liệu và thói quen: nó chỉ là deploy-full
+# với lớp bọc công khai.
+deploy-prod:
+	@$(MAKE) --no-print-directory deploy-full PUBLIC=1
 
 _after-up:
+ifeq ($(PUBLIC),1)
+	@echo ""
+	@echo "Chế độ công khai: chỉ Caddy phơi 80/443. Backend, worker, vllm,"
+	@echo "qdrant chỉ nghe 127.0.0.1 của host — debug bằng SSH tunnel."
+endif
 	@echo ""
 	@echo "Kiểu triển khai: $(KIND)"
 	@echo "Lần đầu mất 15-30 phút để tải model. Theo dõi: make logs-vllm"
 	@echo ""
+ifeq ($(PUBLIC),1)
+	@echo "  Giao diện: https://$$(grep '^DOMAIN=' .env | cut -d= -f2)"
+else
 	@echo "  Giao diện: http://localhost:$${FRONTEND_PORT:-7860}"
+endif
 
 # --- Vận hành -----------------------------------------------------------
 
