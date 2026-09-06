@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   BookOpen,
   Check,
   FileStack,
@@ -10,10 +11,8 @@ import {
   SquarePen,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Sidebar,
   SidebarContent,
@@ -31,7 +30,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { UserMenu } from "@/features/auth";
-import { useCollections } from "@/hooks/use-api";
+import { useConfiguredCollections } from "@/hooks/use-api";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +54,8 @@ interface AppSidebarProps {
   onNewChat?: () => void;
   onDeleteSession?: (id: string) => void;
   onOpenSettings?: () => void;
+  /** Mở dialog tạo bộ tài liệu. */
+  onCreateCollection?: () => void;
 }
 
 export function AppSidebar({
@@ -68,24 +69,17 @@ export function AppSidebar({
   onNewChat,
   onDeleteSession,
   onOpenSettings,
+  onCreateCollection,
 }: AppSidebarProps) {
-  const { data: collections, isLoading, isError, refetch } = useCollections();
-  const [isAddingCollection, setIsAddingCollection] = useState(false);
-  const [draftCollection, setDraftCollection] = useState("");
+  // Danh sách bộ ĐÃ CẤU HÌNH, không phải collection có trong vector DB: bộ
+  // chưa cấu hình thì không upload lẫn tra cứu được nên hiện ra chỉ gây lỗi.
+  const { data, isLoading, isError, refetch } = useConfiguredCollections();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const { t } = useI18n();
 
-  const items = collections ?? [];
-  const isKnown = items.includes(collection);
+  const items = data?.collections ?? [];
   const collectionSessions = sessions.filter((s) => s.collection === collection);
-
-  function commitDraftCollection() {
-    const name = draftCollection.trim();
-    if (name) onCollectionChange(name);
-    setDraftCollection("");
-    setIsAddingCollection(false);
-  }
 
   // Danh sách các Tab khu vực làm việc (Đã hợp nhất Mục lục vào trong Tài liệu)
   const NAV_TABS: { id: AreaId; label: string; icon: typeof MessageSquare }[] = [
@@ -220,7 +214,7 @@ export function AppSidebar({
             <span>{t("collections_title")}</span>
             <button
               type="button"
-              onClick={() => setIsAddingCollection((v) => !v)}
+              onClick={onCreateCollection}
               className="text-muted-foreground hover:text-foreground transition-colors"
               title={t("add_collection")}
             >
@@ -229,26 +223,6 @@ export function AppSidebar({
           </SidebarGroupLabel>
 
           <SidebarGroupContent>
-            {isAddingCollection && (
-              <div className="px-1.5 pb-2 group-data-[collapsible=icon]:hidden">
-                <Input
-                  autoFocus
-                  value={draftCollection}
-                  onChange={(e) => setDraftCollection(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitDraftCollection();
-                    if (e.key === "Escape") {
-                      setDraftCollection("");
-                      setIsAddingCollection(false);
-                    }
-                  }}
-                  onBlur={commitDraftCollection}
-                  placeholder={t("new_collection_placeholder")}
-                  className="h-7 text-xs font-mono"
-                  aria-label={t("new_collection_placeholder")}
-                />
-              </div>
-            )}
 
             <SidebarMenu className="space-y-0.5">
               {isLoading && (
@@ -259,21 +233,30 @@ export function AppSidebar({
                 </>
               )}
 
-              {!isLoading && !isKnown && collection && (
-                <CollectionMenuItem
-                  name={collection}
-                  isActive
-                  onSelect={() => onCollectionChange(collection)}
-                  isCollapsed={isCollapsed}
-                />
+              {!isLoading && items.length === 0 && (
+                <div className="px-2 py-1.5 group-data-[collapsible=icon]:hidden">
+                  <p className="text-[11px] text-muted-foreground">
+                    Chưa có bộ tài liệu nào.
+                  </p>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-[11px]"
+                    onClick={onCreateCollection}
+                  >
+                    Tạo bộ đầu tiên
+                  </Button>
+                </div>
               )}
 
-              {items.map((name) => (
+              {items.map((item) => (
                 <CollectionMenuItem
-                  key={name}
-                  name={name}
-                  isActive={name === collection}
-                  onSelect={() => onCollectionChange(name)}
+                  key={item.name}
+                  name={item.name}
+                  label={item.description || item.name}
+                  isReady={item.is_ready}
+                  isActive={item.name === collection}
+                  onSelect={() => onCollectionChange(item.name)}
                   isCollapsed={isCollapsed}
                 />
               ))}
@@ -367,11 +350,16 @@ export function AppSidebar({
 
 function CollectionMenuItem({
   name,
+  label,
+  isReady,
   isActive,
   onSelect,
   isCollapsed,
 }: {
   name: string;
+  label: string;
+  /** Mô hình của bộ còn dùng được không. False thì cần chọn lại. */
+  isReady: boolean;
   isActive: boolean;
   onSelect: () => void;
   isCollapsed: boolean;
@@ -389,8 +377,15 @@ function CollectionMenuItem({
             )}
           >
             <div className="flex items-center gap-2 min-w-0">
-              <Layers className="size-3.5 shrink-0 text-primary/80" aria-hidden />
-              <span className="truncate">{name}</span>
+              {isReady ? (
+                <Layers className="size-3.5 shrink-0 text-primary/80" aria-hidden />
+              ) : (
+                <AlertTriangle
+                  className="size-3.5 shrink-0 text-amber-600"
+                  aria-label="Cần chọn lại mô hình"
+                />
+              )}
+              <span className="truncate">{label}</span>
             </div>
             {isActive && (
               <Check className="size-3 shrink-0 text-emerald-600 group-data-[collapsible=icon]:hidden" />

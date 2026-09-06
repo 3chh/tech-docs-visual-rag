@@ -5,7 +5,6 @@ import type { UploadFileMeta } from "@/lib/types";
 
 export const queryKeys = {
   health: ["health"] as const,
-  collections: (userId: string) => ["collections", userId] as const,
   toc: (collection: string) => ["toc", collection] as const,
   sections: (collection: string) => ["sections", collection] as const,
   connections: ["connections"] as const,
@@ -20,15 +19,6 @@ export function useHealth() {
     refetchInterval: 30_000,
     retry: false,
     staleTime: 10_000,
-  });
-}
-
-export function useCollections(userId = "default") {
-  return useQuery({
-    queryKey: queryKeys.collections(userId),
-    queryFn: () => api.listCollections(userId),
-    retry: 1,
-    staleTime: 60_000,
   });
 }
 

@@ -1,5 +1,5 @@
 import { Globe } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AppSidebar, type AreaId } from "@/components/layout/AppSidebar";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,11 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AskPanel } from "@/features/ask";
 import { useChatSessions } from "@/features/ask/use-sessions";
+import { CreateCollectionDialog } from "@/features/documents/CreateCollectionDialog";
 import { DocumentsPanel } from "@/features/documents/DocumentsPanel";
+import { NoCollectionState } from "@/features/documents/NoCollectionState";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
+import { useConfiguredCollections } from "@/hooks/use-api";
 import {
   loadSettings,
   saveSettings,
@@ -20,8 +23,11 @@ import { useI18n } from "@/lib/i18n";
 import type { SearchResult, TocBook, TocSection } from "@/lib/types";
 
 export default function App() {
-  const [collection, setCollection] = useState("default");
+  // Chưa chọn bộ nào thì để rỗng, đừng đoán "default": bộ đó có thể không
+  // tồn tại, và mọi lệnh gọi tới nó sẽ trả 404/409 gây hoang mang.
+  const [collection, setCollection] = useState("");
   const [area, setArea] = useState<AreaId>("ask");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [settings, setSettings] = useState<StoredSettings>(loadSettings);
   const [activeSource, setActiveSource] = useState<SearchResult | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -87,7 +93,22 @@ export default function App() {
     }
   }
 
+  const configured = useConfiguredCollections();
+  const items = configured.data?.collections;
+
+  // Chọn sẵn bộ đầu tiên khi tải xong, và nhảy sang bộ khác nếu bộ đang chọn
+  // vừa bị xoá. Không ghi đè lựa chọn của người dùng khi bộ đó còn tồn tại.
+  //
+  // Phụ thuộc vào `items` chứ không phải một mảng dựng mới mỗi lần render:
+  // react-query giữ nguyên reference nên effect chỉ chạy khi danh sách đổi thật.
+  useEffect(() => {
+    if (!items) return;
+    if (collection && items.some((c) => c.name === collection)) return;
+    setCollection(items[0]?.name ?? "");
+  }, [items, collection]);
+
   const areaTitle = area === "ask" ? t("nav_chat") : t("nav_documents");
+  const hasCollection = Boolean(collection);
 
   return (
     <SidebarProvider>
@@ -108,6 +129,10 @@ export default function App() {
         }}
         onDeleteSession={deleteSession}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onCreateCollection={() => {
+          setArea("documents");
+          setIsCreateOpen(true);
+        }}
       />
 
       <SidebarInset className="flex h-svh min-w-0 flex-col overflow-hidden bg-background">
@@ -119,9 +144,11 @@ export default function App() {
             <h2 className="text-xs font-semibold text-foreground truncate">
               {areaTitle}
             </h2>
-            <span className="text-[11px] text-muted-foreground/80 font-mono">
-              / {collection}
-            </span>
+            {hasCollection && (
+              <span className="text-[11px] text-muted-foreground/80 font-mono">
+                / {collection}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1">
@@ -158,7 +185,18 @@ export default function App() {
 
         {/* Main Content Area: Chỉ còn 2 tab chính tinh gọn */}
         <main className="min-h-0 flex-1 overflow-hidden">
-          {area === "ask" && (
+          {!configured.isLoading && !hasCollection && (
+            <NoCollectionState
+              missingCapabilities={configured.data?.missing_capabilities ?? []}
+              onCreate={() => {
+                setArea("documents");
+                setIsCreateOpen(true);
+              }}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+            />
+          )}
+
+          {hasCollection && area === "ask" && (
             <AskPanel
               collection={collection}
               options={settings.ask}
@@ -169,18 +207,29 @@ export default function App() {
             />
           )}
 
-          {area === "documents" && (
+          {hasCollection && area === "documents" && (
             <div className="h-full overflow-y-auto">
               <DocumentsPanel
                 collection={collection}
-                onCollectionChange={setCollection}
                 onOpenBookInCanvas={handleOpenBookInCanvas}
                 onOpenSectionInCanvas={handleOpenSectionInCanvas}
                 onOpenGeneralSettings={() => setIsSettingsOpen(true)}
+                onCreateCollection={() => setIsCreateOpen(true)}
               />
             </div>
           )}
         </main>
+        {/* Dialog tạo bộ ở đây, không ở DocumentsPanel: khi chưa có bộ nào
+            thì panel đó không render nên dialog sẽ không mở được. */}
+        <CreateCollectionDialog
+          open={isCreateOpen}
+          onOpenChange={setIsCreateOpen}
+          onCreated={(name) => {
+            setCollection(name);
+            setArea("documents");
+          }}
+          onOpenGeneralSettings={() => setIsSettingsOpen(true)}
+        />
       </SidebarInset>
     </SidebarProvider>
   );

@@ -31,7 +31,6 @@ import type { TocBook, TocSection, UploadFileMeta, UploadResponse } from "@/lib/
 import { cn } from "@/lib/utils";
 
 import { CollectionSettingsDialog } from "./CollectionSettingsDialog";
-import { CreateCollectionDialog } from "./CreateCollectionDialog";
 import {
   createQueuedFiles,
   FileConfigRow,
@@ -41,17 +40,19 @@ import {
 
 export function DocumentsPanel({
   collection,
-  onCollectionChange,
   onOpenBookInCanvas,
   onOpenSectionInCanvas,
   onOpenGeneralSettings,
+  onCreateCollection,
 }: {
   collection: string;
-  onCollectionChange?: (col: string) => void;
   onOpenBookInCanvas?: (book: TocBook) => void;
   onOpenSectionInCanvas?: (section: TocSection, book: TocBook) => void;
   /** Mở Cấu hình chung khi bộ chưa có mô hình dùng được. */
   onOpenGeneralSettings?: () => void;
+  /** Mở dialog tạo bộ. Dialog do App sở hữu vì khi chưa có bộ nào thì
+   * panel này không được render. */
+  onCreateCollection?: () => void;
 }) {
   const toc = useTableOfContents(collection);
   const upload = useUploadFiles();
@@ -68,7 +69,7 @@ export function DocumentsPanel({
   // Cấu hình bộ tài liệu — server là nguồn sự thật, không phải localStorage.
   const collectionConfig = useCollectionConfig(collection);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
 
   const books = toc.data?.books ?? [];
   const totals = useMemo(
@@ -161,7 +162,7 @@ export function DocumentsPanel({
           {/* Nút Tạo bộ tài liệu mới */}
           <Button
             size="sm"
-            onClick={() => setIsCreateOpen(true)}
+            onClick={onCreateCollection}
             className="h-8 gap-1.5 text-xs bg-emerald-600 text-white hover:bg-emerald-700 font-medium"
           >
             <FilePlus2 className="size-3.5" />
@@ -178,13 +179,6 @@ export function DocumentsPanel({
         onOpenGeneralSettings={onOpenGeneralSettings}
       />
 
-      {/* Dialog Tạo bộ tài liệu mới */}
-      <CreateCollectionDialog
-        open={isCreateOpen}
-        onOpenChange={setIsCreateOpen}
-        onCreated={(newColId) => onCollectionChange?.(newColId)}
-        onOpenGeneralSettings={onOpenGeneralSettings}
-      />
 
       {/* Thống kê tài liệu */}
       {toc.isLoading ? (
@@ -231,7 +225,7 @@ export function DocumentsPanel({
                     Chọn lại mô hình
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+                  <Button size="sm" onClick={onCreateCollection}>
                     <FilePlus2 className="size-3.5" aria-hidden />
                     Tạo bộ tài liệu
                   </Button>
