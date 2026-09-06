@@ -20,10 +20,21 @@ import os
 import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
+try:
+    import fitz
+except ImportError:
+    fitz = None
 
-import fitz
-from paddleocr import TextDetection
-from pdf2image import convert_from_path
+try:
+    from paddleocr import TextDetection
+except ImportError:
+    TextDetection = None
+
+try:
+    from pdf2image import convert_from_path
+except ImportError:
+    convert_from_path = None
+
 from PIL import Image
 
 from ..core.logging import get_logger

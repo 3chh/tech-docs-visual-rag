@@ -1,4 +1,7 @@
-from paddleocr import LayoutDetection
+try:
+    from paddleocr import LayoutDetection
+except ImportError:
+    LayoutDetection = None
 from PIL import Image, ImageDraw
 from pathlib import Path
 from typing import List, Dict
