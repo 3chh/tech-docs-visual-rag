@@ -23,53 +23,8 @@ if sys.platform == "win32":
 
 PORT = int(os.environ.get("BACKEND_PORT", 2005))
 
-# --- SVG generator cho ảnh cắt lát tài liệu mô phỏng ---
-def generate_fake_page_svg(title: str, doc_name: str, page_str: str, formulas: list = None) -> str:
-    formulas = formulas or []
-    formula_svg = ""
-    for idx, f in enumerate(formulas):
-        y_pos = 140 + idx * 45
-        formula_svg += f"""
-        <g transform="translate(48, {y_pos})">
-            <rect width="424" height="34" rx="4" fill="#f1f5f9" stroke="#cbd5e1" stroke-dasharray="2,2"/>
-            <text x="12" y="22" font-family="monospace" font-size="12" fill="#0f172a">📐 [Công thức {idx+1}] {f}</text>
-        </g>
-        """
+# --- Dữ liệu chuẩn mô phỏng (Demo Backend) ---
 
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="560" height="420" viewBox="0 0 560 420">
-        <rect width="560" height="420" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" rx="8"/>
-        <!-- Header tài liệu -->
-        <rect x="0" y="0" width="560" height="50" fill="#f8fafc" rx="8"/>
-        <text x="32" y="30" font-family="system-ui, sans-serif" font-size="13" font-weight="bold" fill="#334155">📄 {doc_name}</text>
-        <text x="500" y="30" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#64748b">{page_str}</text>
-        <line x1="0" y1="50" x2="560" y2="50" stroke="#e2e8f0" stroke-width="1"/>
-
-        <!-- Tiêu đề mục -->
-        <text x="48" y="90" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" fill="#0f172a">{title}</text>
-        <line x1="48" y1="102" x2="512" y2="102" stroke="#3b82f6" stroke-width="2"/>
-
-        <!-- Nội dung giả lập -->
-        <rect x="48" y="118" width="400" height="8" rx="2" fill="#94a3b8"/>
-        <rect x="48" y="132" width="440" height="8" rx="2" fill="#cbd5e1"/>
-        <rect x="48" y="146" width="370" height="8" rx="2" fill="#cbd5e1"/>
-
-        {formula_svg}
-
-        <!-- Phần văn bản tiếp theo -->
-        <g transform="translate(0, {len(formulas) * 35})">
-            <rect x="48" y="220" width="450" height="8" rx="2" fill="#94a3b8"/>
-            <rect x="48" y="235" width="430" height="8" rx="2" fill="#cbd5e1"/>
-            <rect x="48" y="250" width="410" height="8" rx="2" fill="#cbd5e1"/>
-            <rect x="48" y="265" width="360" height="8" rx="2" fill="#cbd5e1"/>
-            <rect x="48" y="295" width="424" height="60" rx="4" fill="#f8fafc" stroke="#e2e8f0"/>
-            <text x="64" y="325" font-family="system-ui, sans-serif" font-size="11" fill="#64748b">📊 [Bảng số liệu đối soát kỹ thuật: Hệ số an toàn và giá trị giới hạn tải trọng]</text>
-        </g>
-        
-        <!-- Footer watermark -->
-        <text x="48" y="400" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">Hệ thống Visual RAG Cosmo ChatPDF - Cắt lát mục chuẩn ToC</text>
-    </svg>"""
-    b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
-    return f"data:image/svg+xml;base64,{b64}"
 
 
 # --- Mock Dữ liệu chuẩn ---
@@ -320,62 +275,50 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
         if path in ("/search_by_section_title", "/api/v1/search/search_by_section_title"):
             title = payload.get("sectionTitle", "5.4.4 Cấu kiện chịu nén đúng tâm và nén uốn")
-            img_b64 = generate_fake_page_svg(
-                title=title,
-                doc_name="TCVN 11823:2017 (Quyển 1)",
-                page_str="Trang in: -93-",
-                formulas=[r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}", r"\lambda = \dfrac{l_e}{r}"]
-            )
             result = {
                 "section_title": title,
                 "ancestors": ["Chương 5: Kết cấu thép", "5.4 Trạng thái giới hạn chịu lực"],
-                "section_pages": ["-93-", "-94-"],
+                "section_pages": ["Trang 3", "Trang 4"],
                 "formulas": [
-                    {"content": r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}", "coordinate": [100, 150, 450, 200], "page": "-93-"},
-                    {"content": r"\lambda = \dfrac{l_e}{r}", "coordinate": [100, 220, 350, 260], "page": "-93-"},
-                    {"content": r"\sigma_{cud} = \rho_{cg} \cdot \sigma_y", "coordinate": [100, 280, 480, 320], "page": "-94-"},
+                    {"content": r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}", "coordinate": [100, 150, 450, 200], "page": "Trang 3"},
+                    {"content": r"\lambda = \dfrac{l_e}{r}", "coordinate": [100, 220, 350, 260], "page": "Trang 3"},
+                    {"content": r"\sigma_{cud} = \rho_{cg} \cdot \sigma_y", "coordinate": [100, 280, 480, 320], "page": "Trang 4"},
                 ],
-                "metadata": {"file_name": "TCVN_11823_2017_Phan5.pdf", "db_name": "tcvn"},
-                "image_path": "/data/metadata/tcvn/section_5_4_4.png",
-                "image_base64": img_b64,
-                "chunk_images": [img_b64],
+                "metadata": {"file_name": "sample_document.pdf", "db_name": "tcvn"},
+                "image_path": "/sample_document.pdf#page=3",
+                "image_base64": None,
+                "chunk_images": [],
             }
             self._send_json({"results": [result], "total": 1})
             return
 
         if path in ("/api/v1/chat/ask", "/ask"):
             user_query = payload.get("query", "")
-            img_b64 = generate_fake_page_svg(
-                title="5.4.4 Cấu kiện chịu nén đúng tâm và nén uốn",
-                doc_name="TCVN 11823:2017 (Quyển 1)",
-                page_str="Trang in: -93-",
-                formulas=[r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}", r"\lambda = \dfrac{l_e}{r}"]
-            )
             source1 = {
                 "section_title": "5.4.4 Cấu kiện chịu nén đúng tâm và nén uốn",
                 "ancestors": ["Chương 5: Kết cấu thép", "5.4 Trạng thái giới hạn chịu lực"],
-                "section_pages": ["-93-", "-94-"],
+                "section_pages": ["Trang 3", "Trang 4"],
                 "formulas": [
-                    {"content": r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}", "coordinate": [100, 150, 450, 200], "page": "-93-"},
-                    {"content": r"\lambda = \dfrac{l_e}{r}", "coordinate": [100, 220, 350, 260], "page": "-93-"},
+                    {"content": r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}", "coordinate": [100, 150, 450, 200], "page": "Trang 3"},
+                    {"content": r"\lambda = \dfrac{l_e}{r}", "coordinate": [100, 220, 350, 260], "page": "Trang 3"},
                 ],
-                "metadata": {"file_name": "TCVN_11823_2017_Phan5.pdf", "db_name": "tcvn"},
-                "image_path": "/data/metadata/tcvn/section_5_4_4.png",
-                "image_base64": img_b64,
-                "chunk_images": [img_b64],
+                "metadata": {"file_name": "sample_document.pdf", "db_name": "tcvn"},
+                "image_path": "/sample_document.pdf#page=3",
+                "image_base64": None,
+                "chunk_images": [],
             }
 
             answer_text = (
                 f"Đối với câu hỏi **\"{user_query}\"**:\n\n"
                 "1. **Điều kiện kiểm tra cường độ chịu nén:**\n"
-                "Theo **Mục 5.4.4** (Trang 93), ứng suất nén tính toán phải thỏa mãn công thức giới hạn:\n\n"
+                "Theo **Mục 5.4.4** (Trang 3), ứng suất nén tính toán phải thỏa mãn công thức giới hạn:\n\n"
                 "$$\\sigma_c = \\frac{N}{A_g} \\le \\sigma_{cud}$$\n\n"
                 "Trong đó:\n"
                 "- $N$: Lực nén dọc trục tính toán theo tổ hợp tác động cơ bản.\n"
                 "- $A_g$: Diện tích mặt cắt ngang nguyên của thanh thép.\n"
                 "- $\\sigma_{cud}$: Ứng suất nén giới hạn danh định, phụ thuộc vào độ mảnh $\\lambda = l_e / r$.\n\n"
                 "2. **Hệ số uốn dọc và ổn định cục bộ:**\n"
-                "Được tra theo **Bảng 5.4.1** (Trang 94) căn cứ vào cấp độ dẻo và bề dày bản cánh/bản bụng."
+                "Được tra theo **Bảng 5.4.1** (Trang 4) căn cứ vào cấp độ dẻo và bề dày bản cánh/bản bụng."
             )
 
             response = {
@@ -400,23 +343,17 @@ class DemoHandler(SimpleHTTPRequestHandler):
             return
 
         if path in ("/search_with_images", "/api/v1/search/search_with_images"):
-            img_b64 = generate_fake_page_svg(
-                title="5.4.4 Cấu kiện chịu nén đúng tâm và nén uốn",
-                doc_name="TCVN 11823:2017 (Quyển 1)",
-                page_str="Trang in: -93-",
-                formulas=[r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}"]
-            )
             result = {
                 "section_title": "5.4.4 Cấu kiện chịu nén đúng tâm và nén uốn",
                 "ancestors": ["Chương 5: Kết cấu thép", "5.4 Trạng thái giới hạn chịu lực"],
-                "section_pages": ["-93-", "-94-"],
+                "section_pages": ["Trang 3", "Trang 4"],
                 "formulas": [
-                    {"content": r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}", "coordinate": [100, 150, 450, 200], "page": "-93-"},
+                    {"content": r"\sigma_c = \dfrac{N}{A_g} \le \sigma_{cud}", "coordinate": [100, 150, 450, 200], "page": "Trang 3"},
                 ],
-                "metadata": {"file_name": "TCVN_11823_2017_Phan5.pdf", "db_name": "tcvn"},
-                "image_path": "/data/metadata/tcvn/section_5_4_4.png",
-                "image_base64": img_b64,
-                "chunk_images": [img_b64],
+                "metadata": {"file_name": "sample_document.pdf", "db_name": "tcvn"},
+                "image_path": "/sample_document.pdf#page=3",
+                "image_base64": None,
+                "chunk_images": [],
             }
             self._send_json({
                 "user_id": payload.get("user_id", "default"),

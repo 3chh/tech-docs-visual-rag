@@ -24,6 +24,7 @@ interface PdfViewerProps {
   zoom?: number; // % ví dụ 100 nghĩa là 100% fit width
   onPageChange?: (page: number, totalPages: number) => void;
   className?: string;
+  singlePage?: boolean;
 }
 
 const PAGE_GAP = 16; // khoảng cách giữa các trang (px)
@@ -175,6 +176,7 @@ export function PdfViewer({
   zoom = 100,
   onPageChange,
   className,
+  singlePage = false,
 }: PdfViewerProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -285,7 +287,7 @@ export function PdfViewer({
 
   // Theo dõi sự kiện cuộn chuột để cập nhật số trang đang xem
   const handleScroll = () => {
-    if (isProgrammaticScrollRef.current) return;
+    if (singlePage || isProgrammaticScrollRef.current) return;
     const container = containerRef.current;
     if (!container || pageHeight <= 0) return;
 
@@ -309,6 +311,15 @@ export function PdfViewer({
     const container = containerRef.current;
     if (!container || pageHeight <= 0) return;
     const clampedPage = Math.min(Math.max(1, targetPage), totalPages);
+
+    if (singlePage) {
+      setCurrentPage(clampedPage);
+      setJumpPageInput(String(clampedPage));
+      onPageChange?.(clampedPage, totalPages);
+      container.scrollTop = 0;
+      return;
+    }
+
     const pageStride = pageHeight + PAGE_GAP;
     const targetTop = (clampedPage - 1) * pageStride;
 
@@ -324,17 +335,22 @@ export function PdfViewer({
     }, 450);
   }
 
-  // Chuyển trang khi initialPage thay đổi từ bên ngoài (ví dụ nhấp ToC)
+  // Chuyển trang khi initialPage thay đổi từ bên ngoài (ví dụ nhấp ToC hoặc chọn trích dẫn)
   useEffect(() => {
     if (
       initialPage >= 1 &&
       initialPage <= totalPages &&
-      pageHeight > 0 &&
-      Math.abs(initialPage - currentPage) > 0
+      initialPage !== currentPage
     ) {
-      scrollToPage(initialPage);
+      if (singlePage) {
+        setCurrentPage(initialPage);
+        setJumpPageInput(String(initialPage));
+        onPageChange?.(initialPage, totalPages);
+      } else if (pageHeight > 0) {
+        scrollToPage(initialPage);
+      }
     }
-  }, [initialPage, totalPages, pageHeight]);
+  }, [initialPage, totalPages, pageHeight, singlePage]);
 
   // Kéo thả chuột để di chuyển (Pan) trong tài liệu
   function handleMouseDown(e: React.MouseEvent<HTMLDivElement>) {
@@ -395,6 +411,10 @@ export function PdfViewer({
     }
   }
 
+  const pagesToRender = singlePage
+    ? [currentPage]
+    : Array.from({ length: totalPages }, (_, i) => i + 1);
+
   return (
     <div className={cn("flex flex-col h-full min-h-0 bg-muted/10", className)}>
       {/* PDF Controls Header Bar */}
@@ -445,7 +465,7 @@ export function PdfViewer({
         </div>
       </div>
 
-      {/* Main Canvas Scroll Area: Cuộn dọc liên tục qua toàn bộ các trang + kéo thả pan */}
+      {/* Main Canvas Scroll Area: Cuộn dọc hoặc hiển thị trang đối soát */}
       <div
         ref={containerRef}
         onMouseDown={handleMouseDown}
@@ -478,7 +498,7 @@ export function PdfViewer({
               gap: `${PAGE_GAP}px`,
             }}
           >
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+            {pagesToRender.map((pageNum) => (
               <PdfPageItem
                 key={pageNum}
                 pageNumber={pageNum}
