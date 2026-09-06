@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from ..core.builtin import seed_builtin_connection
 from ..core.config import get_settings
 from ..core.logging import get_logger, setup_logging
 from . import __version__
@@ -25,6 +26,14 @@ async def lifespan(app: FastAPI):
     logger.info("Embedding: %s (%s)", settings.embedding.type, settings.embedding.model_name)
     logger.info("PDF worker: %s", settings.document.worker_endpoint)
     settings.paths.metadata_dir.mkdir(parents=True, exist_ok=True)
+
+    # Bản deploy đầy đủ có vLLM trong stack: tạo sẵn kết nối để người dùng
+    # không phải tự đoán endpoint nội bộ.
+    builtin = seed_builtin_connection()
+    if builtin is not None:
+        logger.info("VLM built-in: %s @ %s", builtin.model_name, builtin.endpoint)
+    else:
+        logger.info("Không có VLM built-in — người dùng tự cấu hình trên giao diện")
 
     yield
 

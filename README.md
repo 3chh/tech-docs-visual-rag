@@ -64,12 +64,12 @@ Muốn kiểm tra build hoặc phát triển frontend:
 
 ```bash
 cd cosmo-chatpdf
-make up-ui
+make deploy-demo
 ```
 
-Lên trong khoảng một phút — chỉ frontend + Qdrant, không nạp model nào, không cần API key. Mở http://localhost:7860.
+Lên trong khoảng một phút — frontend + Qdrant + một backend trả dữ liệu mẫu, không nạp model nào, không cần API key. Mở http://localhost:7860.
 
-UI sẽ hiện banner **"🔴 không kết nối được"** vì backend không chạy ở chế độ này. Hai tab và mọi thành phần vẫn render đầy đủ; bấm nút thì báo lỗi kết nối — đúng như mong đợi.
+Đây là kiểu duy nhất không cần NVIDIA Container Toolkit.
 
 ---
 
@@ -81,10 +81,19 @@ Chỉ cần Docker + NVIDIA Container Toolkit. **Không cài gì trên máy** �
 git clone <repo> && cd cosmo-chatpdf
 
 cp .env.example .env
-# Điền GEMINI_API_KEY — đó là biến bắt buộc duy nhất
+# Điền CREDENTIALS_SECRET — đó là biến bắt buộc duy nhất
+#   openssl rand -base64 32
 
-make up-gpu        # một lệnh, cả stack lên
+make deploy-full   # một lệnh, cả stack lên
 ```
+
+API key của mô hình **không** nằm trong `.env`. Người dùng nhập trên giao diện,
+key được mã hoá bằng `CREDENTIALS_SECRET` rồi lưu xuống đĩa, và không endpoint
+nào trả lại key gốc — đọc lên chỉ được bản che `sk-proj-••••7890`.
+
+`make deploy-full` có vLLM trong stack nên tạo sẵn một kết nối trỏ vào đó;
+tạo bộ tài liệu, chọn kết nối này là dùng được ngay. Các kiểu deploy khác
+(`deploy-hybrid`) thì tự thêm kết nối OpenAI hoặc Gemini trên giao diện trước.
 
 Lần đầu mất **15–30 phút** để tải model (~15GB). Theo dõi:
 
@@ -98,7 +107,7 @@ Xong thì mở http://localhost:7860.
 Muốn tải model trước cho khỏi chờ lúc khởi động:
 
 ```bash
-make pull-models && make up-gpu
+make pull-models && make deploy-full
 ```
 
 ```bash
@@ -107,7 +116,7 @@ make ps            # trạng thái service
 make down          # dừng
 ```
 
-Không có GPU thì `make up` vẫn lên được để xem giao diện, nhưng vLLM sẽ không chạy nổi và embed cực chậm.
+Không có GPU thì dùng `make deploy-demo` để xem giao diện. Các kiểu khác đều cần NVIDIA Container Toolkit.
 
 ---
 
@@ -120,7 +129,7 @@ Hệ thống dùng ba model, hai chạy trên GPU của bạn:
 | **VLM** (InternVL3-8B) | Đọc ảnh-mục, sinh câu trả lời | vLLM trong stack | ~8 GB |
 | **ColQwen 2.5-3B** | Embed ảnh-mục để truy xuất | backend, tự tải | ~10 GB |
 | **PaddleOCR + PP-DocLayout** | Layout detection, OCR | worker, tự tải | ~5 GB |
-| Gemini Flash | Sửa cây mục lục | API ngoài | 0 |
+| LLM sửa cây mục lục | Sửa cây mục lục sau khi phân tích | Kết nối người dùng chọn cho bộ | 0 |
 
 vLLM chạy bằng **Docker image** `vllm/vllm-openai`, không phải pip install. Model weights tải vào volume `cosmo_hf-cache` dùng chung, chỉ tải một lần.
 
@@ -128,21 +137,22 @@ Chọn model theo VRAM, tách GPU, dùng VLM host sẵn ở nơi khác, xử lý
 
 Nếu đã có vLLM chạy ở máy khác:
 
-```bash
-# .env
-VLM_ENDPOINT=http://192.168.1.50:8000/v1
-make up-external-vlm      # không khởi động vllm trong stack
-```
+Không cần deploy lại: vào giao diện > **Cấu hình** > thêm kết nối với
+provider `custom`, endpoint `http://192.168.1.50:8000/v1`, rồi chọn nó cho bộ
+tài liệu. Dùng `make deploy-hybrid` để khỏi khởi động vLLM trong stack.
 
 ---
 
 ## Cấu hình
 
-Mọi giá trị trong `backend/config/config.yaml` đều override được bằng biến môi trường. **Secret chỉ đọc từ env, không bao giờ để trong YAML.** Thiếu secret bắt buộc thì service báo lỗi ngay lúc khởi động, không phải lúc gọi API.
+Mọi giá trị trong `backend/config/config.yaml` đều override được bằng biến môi trường. **`config.yaml` không bao giờ chứa secret** — có test kiểm điều đó.
+
+API key của mô hình không đi qua env lẫn YAML: người dùng nhập trên giao diện, key được mã hoá bằng `CREDENTIALS_SECRET` rồi lưu trong `data/model_connections.json`. Service vẫn lên được khi chưa có key nào — nếu không thì không ai vào được giao diện để nhập.
 
 | Biến | Mặc định | Ghi chú |
 |---|---|---|
-| `GEMINI_API_KEY` | — | **Bắt buộc.** LLM sửa cây mục lục |
+| `CREDENTIALS_SECRET` | — | **Bắt buộc.** Khoá mã hoá API key người dùng nhập |
+| `DEFAULT_VLM_PROVIDER` | `none` | `builtin` để tạo sẵn kết nối tới vLLM trong stack |
 | `VLM_MODEL_NAME` | `OpenGVLab/InternVL3-8B` | Chọn theo VRAM |
 | `VLLM_GPU_MEMORY_UTILIZATION` | `0.35` | Chừa VRAM cho ColQwen và PaddleOCR |
 | `EMBEDDING_MAX_NUM_VISUAL_TOKENS` | `8192` | Giảm 4096 nếu thiếu VRAM |
@@ -188,23 +198,34 @@ Sát ngưỡng — chạy được nếu không index sách lớn trong khi có 
 cosmo-chatpdf/
 ├── backend/
 │   ├── app/              # API service (cổng 8000)
-│   │   ├── api/routes/   # search, indexing, toc, health
+│   │   ├── api/routes/   # search, indexing, toc, health,
+│   │   │                 #   connections, collections, settings
 │   │   ├── schemas/      # pydantic request/response
 │   │   └── services/     # indexing, retrieval, toc, images
 │   ├── worker/           # PDF worker (cổng 8001)
 │   ├── core/             # config, logging, paths
+│   │                     #   connections + crypto: kho API key mã hoá
+│   │                     #   collections: cấu hình mô hình theo từng bộ
+│   │                     #   builtin: kết nối vLLM tạo sẵn cho deploy-full
 │   ├── embeddings/       # ColQwen/ColPali manager
 │   ├── vectordb/         # Qdrant/Milvus manager
 │   ├── document/         # pipeline xử lý PDF
 │   ├── prompts/
 │   └── tests/
-├── frontend/
-│   └── app/
-│       ├── ui/           # tab quản lý file, tab hỏi–đáp
-│       └── services/     # chat, files
-├── docker-compose.yml
+├── frontend/             # Vite + React + TypeScript + Tailwind
+│   └── src/
+│       ├── features/     # ask, documents, outline, source, settings
+│       ├── components/   # shadcn/ui
+│       └── lib/          # client gọi API
+├── deploy/               # Caddyfile + hướng dẫn chọn kiểu deploy
+├── docker-compose.yml    # mọi kiểu deploy, chọn bằng profile
 └── docker-compose.gpu.yml
 ```
+
+Chỉ hai file compose: `docker-compose.yml` chứa mọi kiểu triển khai và chọn
+bằng profile (`full`, `hybrid`, `gpu-node`, `worker-node`, `demo`, `prod`).
+File GPU phải riêng vì khối cấp GPU làm container không khởi động nổi trên máy
+chưa cài NVIDIA Container Toolkit. Xem [deploy/README.md](deploy/README.md).
 
 ---
 
@@ -220,8 +241,7 @@ pip install -r backend/requirements-worker.txt
 uvicorn backend.worker.main:app --reload --port 8001
 
 # Frontend
-pip install -r frontend/requirements.txt
-python -m frontend.app.main
+cd frontend && npm install && npm run dev
 
 # Test — chạy được không cần GPU
 pytest

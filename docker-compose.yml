@@ -1,19 +1,23 @@
-# Cosmo ChatPDF — toàn bộ stack, một lệnh.
+# Cosmo ChatPDF — một file cho mọi kiểu triển khai, chọn bằng profile.
 #
-#   make up          # CPU (chỉ để xem giao diện)
-#   make up-gpu      # có GPU — dùng cái này khi chạy thật
+#   make deploy-hybrid    GPU 16GB, VLM qua API ngoài      <- khuyến nghị
+#   make deploy-full      tất cả tự host, GPU 24GB
+#   make deploy-demo      không model, chỉ xem giao diện
+#   make deploy-prod      server công khai, HTTPS
 #
-# Cổng map khớp với bản chatpdf_ver_2 cũ nên agent_tung và client hiện có
-# không phải sửa gì ngoài host:
+# Không dùng Makefile thì gọi trực tiếp:
+#   COMPOSE_PROFILES=hybrid docker compose -f docker-compose.yml \
+#       -f docker-compose.gpu.yml up -d
 #
-#   vLLM     3333   <- agent_tung custom_llm.base_url
-#   backend  2005   <- agent_tung chunk_search_tool.url
-#   worker   2222
-#   qdrant   6333 / 6334
-#   frontend 7860
+# Vì sao GPU vẫn là file riêng: khối `deploy.resources.reservations.devices`
+# làm container không khởi động nổi trên máy chưa cài NVIDIA Container Toolkit,
+# kể cả khi đặt count=0 — Docker vẫn đi tìm driver. Biến không tắt được nó.
 #
-# Dùng VLM host sẵn ở nơi khác thì thêm -f docker-compose.external-vlm.yml
-# để bỏ service vllm.
+# Cổng map khớp bản chatpdf_ver_2 cũ nên agent_tung không phải sửa gì ngoài host:
+#   vLLM 3333 | backend 2005 | worker 2222 | qdrant 6333/6334 | UI 7860
+#
+# BIND_ADDR giới hạn nơi cổng được phơi ra. Mặc định 0.0.0.0 (mọi interface)
+# cho máy local; bản prod đặt 127.0.0.1 để chỉ Caddy ra Internet.
 
 # Cố định tên project để tên volume không đổi theo tên thư mục.
 name: cosmo
@@ -24,8 +28,9 @@ services:
     image: vllm/vllm-openai:v0.9.2
     container_name: cosmo-vllm
     restart: unless-stopped
+    profiles: ["full"]
     ports:
-      - "${VLLM_PORT:-3333}:8000"
+      - "${BIND_ADDR:-0.0.0.0}:${VLLM_PORT:-3333}:8000"
     volumes:
       - hf-cache:/root/.cache/huggingface
     environment:
@@ -41,7 +46,9 @@ services:
       - --port=8000
     ipc: host
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health')\""]
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"
       interval: 30s
       timeout: 10s
       # Tải model lần đầu có thể mất 10-20 phút tuỳ mạng.
@@ -53,9 +60,10 @@ services:
     image: qdrant/qdrant:v1.12.5
     container_name: cosmo-qdrant
     restart: unless-stopped
+    profiles: ["full", "hybrid", "gpu-node", "demo"]
     ports:
-      - "${QDRANT_HTTP_PORT:-6333}:6333"
-      - "${QDRANT_GRPC_PORT:-6334}:6334"
+      - "${BIND_ADDR:-0.0.0.0}:${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${BIND_ADDR:-0.0.0.0}:${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant-data:/qdrant/storage
     environment:
@@ -75,8 +83,9 @@ services:
       dockerfile: Dockerfile.worker
     container_name: cosmo-worker
     restart: unless-stopped
+    profiles: ["full", "hybrid", "worker-node"]
     ports:
-      - "${WORKER_PORT:-2222}:8001"
+      - "${BIND_ADDR:-0.0.0.0}:${WORKER_PORT:-2222}:8001"
     volumes:
       - app-data:/data
       - hf-cache:/data/.cache/huggingface
@@ -84,18 +93,8 @@ services:
       DATA_DIR: /data
       METADATA_DIR: /data/metadata
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-
-      TOC_VALIDATOR_TYPE: ${TOC_VALIDATOR_TYPE:-gemini}
-      TOC_VALIDATOR_MODEL_NAME: ${TOC_VALIDATOR_MODEL_NAME:-gemini-2.0-flash}
-      TOC_VALIDATOR_ENDPOINT: ${TOC_VALIDATOR_ENDPOINT:-https://generativelanguage.googleapis.com/v1beta/openai/}
-      # Thiếu key thì worker fail-fast lúc khởi động (backend/core/config.py).
-      # Không dùng ${VAR:?} ở đây vì nó chặn cả `make up-ui` (worker không chạy).
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-
-      VLM_TYPE: openai
-      VLM_ENDPOINT: http://vllm:8000/v1
-      VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
+      # Không cần API key: LLM sửa mục lục do backend giải từ kết nối của bộ
+      # tài liệu rồi gửi kèm custom_config trong mỗi lần gọi.
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
       interval: 30s
@@ -110,16 +109,15 @@ services:
       dockerfile: Dockerfile
     container_name: cosmo-backend
     restart: unless-stopped
+    profiles: ["full", "hybrid", "gpu-node"]
     ports:
-      - "${BACKEND_PORT:-2005}:8000"
+      - "${BIND_ADDR:-0.0.0.0}:${BACKEND_PORT:-2005}:8000"
     volumes:
       - app-data:/data
       - hf-cache:/data/.cache/huggingface
     depends_on:
       qdrant:
         condition: service_healthy
-      worker:
-        condition: service_started
     environment:
       DATA_DIR: /data
       METADATA_DIR: /data/metadata
@@ -138,21 +136,15 @@ services:
       EMBEDDING_MIN_WIDTH: ${EMBEDDING_MIN_WIDTH:-600}
       EMBEDDING_MAX_TOKEN: ${EMBEDDING_MAX_TOKEN:-13000}
 
-      PDF_WORKER_ENDPOINT: http://worker:8001/upload_pdf/
+      # gpu-node trỏ sang worker ở máy khác bằng biến này.
+      PDF_WORKER_ENDPOINT: ${PDF_WORKER_ENDPOINT:-http://worker:8001/upload_pdf/}
 
-      # VLM: người dùng chọn provider trên giao diện, key luôn ở server.
-      DEFAULT_VLM_PROVIDER: ${DEFAULT_VLM_PROVIDER:-builtin}
-      VLM_TYPE: openai
-      VLM_ENDPOINT: http://vllm:8000/v1
+      # builtin = tạo sẵn kết nối tới vLLM trong stack. Chỉ profile full có
+      # vLLM; kiểu khác để none và người dùng tự thêm OpenAI/Gemini trên UI.
+      DEFAULT_VLM_PROVIDER: ${DEFAULT_VLM_PROVIDER:-none}
+      BUILTIN_VLM_ENDPOINT: ${BUILTIN_VLM_ENDPOINT:-http://vllm:8000/v1}
       VLM_MODEL_NAME: ${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-EMPTY}
-      OPENAI_CLOUD_API_KEY: ${OPENAI_CLOUD_API_KEY:-}
-      OPENAI_VLM_MODEL: ${OPENAI_VLM_MODEL:-gpt-4o}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_VLM_MODEL: ${GEMINI_VLM_MODEL:-gemini-2.0-flash}
-      CUSTOM_VLM_ENDPOINT: ${CUSTOM_VLM_ENDPOINT:-}
-      CUSTOM_VLM_API_KEY: ${CUSTOM_VLM_API_KEY:-}
-      CUSTOM_VLM_MODEL: ${CUSTOM_VLM_MODEL:-}
+
       # Mã hoá at-rest cho key người dùng nhập trên giao diện.
       CREDENTIALS_SECRET: ${CREDENTIALS_SECRET:-}
     healthcheck:
@@ -162,6 +154,28 @@ services:
       start_period: 300s
       retries: 3
 
+  # Bản demo: cùng cổng, cùng alias mạng `backend` nên nginx.conf không đổi.
+  backend-demo:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.demo
+    container_name: cosmo-backend
+    restart: unless-stopped
+    profiles: ["demo"]
+    ports:
+      - "${BIND_ADDR:-0.0.0.0}:${BACKEND_PORT:-2005}:8000"
+    networks:
+      default:
+        aliases: ["backend"]
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
   # --- Giao diện ------------------------------------------------------------
   frontend:
     build:
@@ -169,11 +183,14 @@ services:
       dockerfile: Dockerfile
     container_name: cosmo-frontend
     restart: unless-stopped
+    profiles: ["full", "hybrid", "gpu-node", "demo"]
     ports:
-      - "${FRONTEND_PORT:-7860}:7860"
-    depends_on:
-      backend:
-        condition: service_started
+      - "${BIND_ADDR:-0.0.0.0}:${FRONTEND_PORT:-7860}:7860"
+    # Không depends_on backend vì hai lý do: nginx.conf resolve host `backend`
+    # lúc có request chứ không lúc khởi động, nên UI lên được cả khi backend
+    # chưa sẵn sàng; và depends_on sang service ngoài profile đang bật là lỗi
+    # cứng của compose, sẽ làm profile demo không chạy nổi.
+    #
     # Không cần biến môi trường hay volume: đây là static file do nginx serve,
     # mọi lệnh gọi API đi qua proxy /api sang backend. Ảnh-mục về dưới dạng
     # base64 trong response nên frontend không cần đọc volume /data.
@@ -184,8 +201,35 @@ services:
       start_period: 10s
       retries: 3
 
+  # --- Reverse proxy (chỉ prod) --------------------------------------------
+  # Bật kèm profile chính: COMPOSE_PROFILES=full,prod
+  #
+  # Lý do quan trọng nhất: Qdrant KHÔNG có xác thực mặc định. Prod đặt
+  # BIND_ADDR=127.0.0.1 nên qdrant, backend, worker, vllm chỉ nghe loopback
+  # của host — vào được bằng SSH tunnel để debug, không vào được từ Internet.
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: cosmo-caddy
+    restart: unless-stopped
+    profiles: ["prod"]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      DOMAIN: "${DOMAIN:?Chua co DOMAIN de xin chung chi TLS}"
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-cosmo}
+      BASIC_AUTH_HASH: "${BASIC_AUTH_HASH:?Chua co BASIC_AUTH_HASH, sinh bang lenh caddy hash-password}"
+
 volumes:
   qdrant-data:
   app-data:
   # Cache model dùng chung: vLLM, ColQwen, PaddleOCR đều tải về đây một lần.
   hf-cache:
+  caddy-data:
+  caddy-config:

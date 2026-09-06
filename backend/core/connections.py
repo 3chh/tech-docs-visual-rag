@@ -14,7 +14,7 @@ import json
 import os
 import threading
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -188,6 +188,45 @@ class ConnectionStore:
 
         logger.info("Đã tạo kết nối %s (%s, %s)", name, provider, model_name)
         return self._to_connection(data[connection_id])
+
+    def ensure(
+        self,
+        connection_id: str,
+        name: str,
+        provider: ProviderKind,
+        model_name: str,
+        capabilities: list[Capability],
+        endpoint: str,
+        api_key: str | None = None,
+    ) -> tuple[ModelConnection, bool]:
+        """Tạo kết nối với id cố định nếu chưa có. Trả về (kết nối, vừa tạo).
+
+        Không ghi đè bản có sẵn: người dùng có thể đã sửa endpoint hoặc tên,
+        và mỗi lần khởi động lại ghi đè thì mất công sửa đó.
+        """
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+        with self._lock:
+            data = self._read()
+            existing = data.get(connection_id)
+            if existing is not None:
+                return self._to_connection(existing), False
+
+            data[connection_id] = {
+                "id": connection_id,
+                "name": name.strip(),
+                "provider": provider,
+                "endpoint": endpoint.strip(),
+                "model_name": model_name.strip(),
+                "capabilities": capabilities,
+                "api_key": encrypt_value(api_key) if api_key else "",
+                "created_at": now,
+                "updated_at": now,
+            }
+            self._write(data)
+
+        logger.info("Đã tạo sẵn kết nối %s (%s)", name, connection_id)
+        return self._to_connection(data[connection_id]), True
 
     def update(
         self,

@@ -2,9 +2,11 @@
 
 from fastapi import APIRouter, HTTPException
 
+from ....core.collections import CollectionNotConfigured
 from ....core.logging import get_logger
 from ...schemas.chat import AskRequest, AskResponse
 from ...services.rag import RagService
+from ..errors import COLLECTION_NOT_CONFIGURED, CONNECTION_INVALID, api_error
 from .search import _to_result
 
 logger = get_logger(__name__)
@@ -50,10 +52,11 @@ async def ask(request: AskRequest) -> AskResponse:
             connection_id=result.get("connection_id"),
             model_name=result.get("model_name"),
         )
+    except CollectionNotConfigured as e:
+        raise api_error(400, COLLECTION_NOT_CONFIGURED, str(e)) from e
     except ValueError as e:
-        # Bộ chưa cấu hình, kết nối không tồn tại, hoặc kết nối thiếu key:
-        # đều là lỗi của người gọi, không phải lỗi server.
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        # Kết nối không tồn tại hoặc thiếu key: lỗi của người gọi.
+        raise api_error(400, CONNECTION_INVALID, str(e)) from e
     except Exception as e:
         logger.exception("Ask thất bại cho collection %s", request.user_id)
         raise HTTPException(status_code=500, detail=f"Ask failed: {e}") from e

@@ -13,7 +13,9 @@ Môi trường tái cấu trúc: Windows, Python 3.13, **không GPU**, **không 
 | Cú pháp toàn bộ code | `python -m compileall backend frontend` | Pass |
 | Import graph | Phân tích AST 98 relative import | Tất cả resolve được |
 | Config loader | `pytest backend/tests/test_config.py` | 9/9 pass |
-| Fail-fast khi thiếu secret | Test riêng cho `GEMINI_API_KEY`, `OPENAI_API_KEY` | Pass |
+| Service lên được khi chưa có key | Test bỏ hết key khỏi env rồi gọi `/health`, `/settings` | Pass |
+| Luồng cấu hình bắt buộc | `pytest backend/tests/test_flow.py` | 29/29 pass |
+| Kết nối vLLM built-in | `pytest backend/tests/test_builtin_vlm.py` | 6/6 pass |
 | `config.yaml` không chứa secret | Test quét file | Pass |
 | Sinh mục lục | `pytest backend/tests/test_toc.py` | 9/9 pass |
 | FastAPI app khởi động | `TestClient(app)`, gọi `GET /health` | 200 OK |
@@ -25,7 +27,7 @@ Môi trường tái cấu trúc: Windows, Python 3.13, **không GPU**, **không 
 | Frontend không kéo torch | Quét import | Sạch |
 | `docker compose config` | Cả 4 tổ hợp (base, gpu, ui-only, external-vlm) | Pass |
 | **`docker build` frontend** | Build thật | Pass — image `cosmo-frontend` |
-| **Frontend chạy thật** | `make up-ui`, `curl localhost:7860` | HTTP 200, container `healthy` |
+| **Frontend chạy thật** | `make deploy-demo`, `curl localhost:7860` | HTTP 200, container `healthy` |
 | **UI render đúng** | Kiểm nội dung HTML trả về (56KB) | Có cả 2 tab, các nút, banner trạng thái backend |
 | **Qdrant chạy thật** | `curl localhost:6333/healthz` | HTTP 200, container `healthy` |
 
@@ -33,7 +35,7 @@ Môi trường tái cấu trúc: Windows, Python 3.13, **không GPU**, **không 
 
 ```bash
 pytest              # chạy lại toàn bộ test
-make up-ui          # chạy lại frontend + qdrant
+make deploy-demo          # chạy lại frontend + qdrant
 ```
 
 ---

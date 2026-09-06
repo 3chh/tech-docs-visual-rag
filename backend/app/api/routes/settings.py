@@ -3,12 +3,12 @@
 Chỉ đọc. Secret không bao giờ trả ra, chỉ trả cờ đã cấu hình hay chưa.
 """
 
-import os
 
 from fastapi import APIRouter
 
 from ....core.config import get_settings
 from ....core.logging import get_logger
+from ....core.providers import has_usable_connection
 from ....document.llm_report_valid import MIN_SECTION_HEIGHT_PX
 from ....vectordb.qdrant_manager import UPSERT_BATCH_SIZE
 from ...schemas.settings import (
@@ -123,13 +123,13 @@ async def read_settings() -> SettingsResponse:
                 type=s.vlm.type,
                 endpoint=s.vlm.endpoint,
                 model_name=s.vlm.model_name,
-                api_key_configured=bool(s.vlm.api_key),
+                api_key_configured=has_usable_connection("vlm"),
             ),
             llm=ModelEndpoint(
                 type=s.llm.type,
                 endpoint=s.llm.endpoint,
                 model_name=s.llm.model_name,
-                api_key_configured=bool(s.llm.api_key),
+                api_key_configured=has_usable_connection("llm"),
             ),
         ),
         data_dir=str(s.paths.data_dir),

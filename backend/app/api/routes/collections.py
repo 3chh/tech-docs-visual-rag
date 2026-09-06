@@ -6,8 +6,17 @@ endpoint tạo bộ bắt buộc có `vlm_connection_id` và `llm_connection_id`
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
+
+from ..errors import (
+    COLLECTION_EXISTS,
+    COLLECTION_NOT_FOUND,
+    CONNECTION_INVALID,
+    INVALID_NAME,
+    NO_MODELS_CONFIGURED,
+    api_error,
+)
 
 from ....core.collections import (
     CollectionExists,
@@ -48,6 +57,8 @@ class CollectionListResponse(BaseModel):
     #: Đã có kết nối nào dùng được chưa. False thì UI phải dẫn người dùng
     #: sang phần Cấu hình trước khi cho tạo bộ.
     can_create: bool
+    #: Loại mô hình còn thiếu ("vlm", "llm"), để UI nói rõ cần thêm cái gì.
+    missing_capabilities: list[str] = Field(default_factory=list)
 
 
 class CreateCollectionRequest(BaseModel):
@@ -92,17 +103,19 @@ def _to_out(config) -> CollectionOut:
     )
 
 
-def _can_create() -> bool:
+def _missing_capabilities() -> list[str]:
+    """Loại mô hình còn thiếu. Rỗng nghĩa là tạo bộ được."""
     from ....core.providers import has_usable_connection
 
-    return has_usable_connection("vlm") and has_usable_connection("llm")
+    return [c for c in ("vlm", "llm") if not has_usable_connection(c)]
 
 
 @router.get("/collections", response_model=CollectionListResponse)
 async def list_collections_configured() -> CollectionListResponse:
     return CollectionListResponse(
         collections=[_to_out(c) for c in list_configured()],
-        can_create=_can_create(),
+        can_create=not _missing_capabilities(),
+        missing_capabilities=_missing_capabilities(),
     )
 
 
@@ -113,11 +126,21 @@ async def create_new_collection(request: CreateCollectionRequest) -> CollectionO
     Hai kết nối được kiểm ngay lúc tạo, để người dùng không phát hiện sai sót
     sau khi đã chờ 20 phút index xong.
     """
+    missing = _missing_capabilities()
+    if missing:
+        raise api_error(
+            409,
+            NO_MODELS_CONFIGURED,
+            "Chưa có mô hình nào dùng được. Vào Cấu hình thêm ít nhất một mô hình "
+            "cho mỗi loại trước khi tạo bộ tài liệu.",
+            missing_capabilities=missing,
+        )
+
     try:
         resolve_connection(request.vlm_connection_id, "vlm")
         resolve_connection(request.llm_connection_id, "llm")
     except (ConnectionNotFound, ConnectionNotUsable) as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise api_error(400, CONNECTION_INVALID, str(e)) from e
 
     try:
         config = create_collection(
@@ -128,9 +151,9 @@ async def create_new_collection(request: CreateCollectionRequest) -> CollectionO
             processing=request.processing,
         )
     except InvalidCollectionName as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+        raise api_error(422, INVALID_NAME, str(e)) from e
     except CollectionExists as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
+        raise api_error(409, COLLECTION_EXISTS, str(e)) from e
 
     return _to_out(config)
 
@@ -139,9 +162,10 @@ async def create_new_collection(request: CreateCollectionRequest) -> CollectionO
 async def get_collection(name: str) -> CollectionOut:
     config = load_config(name)
     if config is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Bộ '{name}' chưa được cấu hình. Tạo bộ trước khi dùng.",
+        raise api_error(
+            404,
+            COLLECTION_NOT_FOUND,
+            f"Bộ '{name}' chưa được cấu hình. Tạo bộ trước khi dùng.",
         )
     return _to_out(config)
 
@@ -150,20 +174,20 @@ async def get_collection(name: str) -> CollectionOut:
 async def update_collection(name: str, request: UpdateCollectionRequest) -> CollectionOut:
     config = load_config(name)
     if config is None:
-        raise HTTPException(status_code=404, detail=f"Bộ '{name}' chưa được cấu hình.")
+        raise api_error(404, COLLECTION_NOT_FOUND, f"Bộ '{name}' chưa được cấu hình.")
 
     if request.vlm_connection_id is not None:
         try:
             resolve_connection(request.vlm_connection_id, "vlm")
         except (ConnectionNotFound, ConnectionNotUsable) as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+            raise api_error(400, CONNECTION_INVALID, str(e)) from e
         config.vlm_connection_id = request.vlm_connection_id
 
     if request.llm_connection_id is not None:
         try:
             resolve_connection(request.llm_connection_id, "llm")
         except (ConnectionNotFound, ConnectionNotUsable) as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+            raise api_error(400, CONNECTION_INVALID, str(e)) from e
         config.llm_connection_id = request.llm_connection_id
 
     if request.description is not None:
@@ -178,7 +202,7 @@ async def update_collection(name: str, request: UpdateCollectionRequest) -> Coll
 async def delete_collection_config(name: str) -> dict[str, str]:
     """Xoá cấu hình bộ. Tài liệu đã index vẫn còn trong vector DB."""
     if not delete_config(name):
-        raise HTTPException(status_code=404, detail=f"Bộ '{name}' chưa được cấu hình.")
+        raise api_error(404, COLLECTION_NOT_FOUND, f"Bộ '{name}' chưa được cấu hình.")
 
     return {
         "status": "deleted",

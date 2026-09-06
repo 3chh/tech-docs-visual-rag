@@ -205,13 +205,14 @@ Search = prefetch `mean_r` + `mean_c` lấy `topk×10` ứng viên → rerank b�
 # Worker
 pip install -r requirements-worker.txt
 sudo apt install poppler-utils          # bắt buộc cho pdf2image
-export METADATA_DIR=$PWD/../data/metadata GEMINI_API_KEY=...
+export METADATA_DIR=$PWD/../data/metadata
+# Worker không cần API key: backend gửi kèm cấu hình LLM trong mỗi lần gọi
 uvicorn backend.worker.main:app --port 8001
 
 # API (terminal khác)
 pip install torch --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
-export METADATA_DIR=$PWD/../data/metadata OPENAI_API_KEY=EMPTY GEMINI_API_KEY=...
+export METADATA_DIR=$PWD/../data/metadata CREDENTIALS_SECRET=$(openssl rand -base64 32)
 export VECTORDB_URI=http://localhost:6333 PDF_WORKER_ENDPOINT=http://localhost:2222/upload_pdf/
 uvicorn backend.app.main:app --port 8000
 ```

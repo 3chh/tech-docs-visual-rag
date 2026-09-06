@@ -6,8 +6,16 @@ Không endpoint nào trả về API key gốc. Đọc lên chỉ được bản 
 
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
+
+from ..errors import (
+    CONNECTION_NOT_FOUND,
+    DUPLICATE_NAME,
+    MISSING_API_KEY,
+    MISSING_ENDPOINT,
+    api_error,
+)
 
 from ....core.connections import (
     DEFAULT_ENDPOINTS,
@@ -94,16 +102,16 @@ async def list_connections() -> ConnectionListResponse:
 @router.post("/connections", response_model=ConnectionListResponse, status_code=201)
 async def create_connection(request: CreateConnectionRequest) -> ConnectionListResponse:
     if request.provider not in PROVIDERS_WITHOUT_KEY and not request.api_key:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Nhà cung cấp '{request.provider}' cần API key.",
+        raise api_error(
+            400, MISSING_API_KEY, f"Nhà cung cấp '{request.provider}' cần API key."
         )
 
     endpoint = (request.endpoint or DEFAULT_ENDPOINTS.get(request.provider, "")).strip()
     if not endpoint:
-        raise HTTPException(
-            status_code=400,
-            detail="Cần endpoint. Nhà cung cấp custom không có endpoint mặc định.",
+        raise api_error(
+            400,
+            MISSING_ENDPOINT,
+            "Cần endpoint. Nhà cung cấp custom không có endpoint mặc định.",
         )
 
     try:
@@ -116,7 +124,7 @@ async def create_connection(request: CreateConnectionRequest) -> ConnectionListR
             endpoint=endpoint,
         )
     except DuplicateNameError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
+        raise api_error(409, DUPLICATE_NAME, str(e)) from e
 
     return _list_response()
 
@@ -136,10 +144,10 @@ async def update_connection(
             api_key=request.api_key,
         )
     except DuplicateNameError as e:
-        raise HTTPException(status_code=409, detail=str(e)) from e
+        raise api_error(409, DUPLICATE_NAME, str(e)) from e
 
     if updated is None:
-        raise HTTPException(status_code=404, detail=f"Không có kết nối '{connection_id}'")
+        raise api_error(404, CONNECTION_NOT_FOUND, f"Không có kết nối '{connection_id}'")
 
     return _list_response()
 
@@ -153,6 +161,6 @@ async def delete_connection(connection_id: str) -> ConnectionListResponse:
     khác chứ không phải bỏ bộ tài liệu.
     """
     if not get_connection_store().delete(connection_id):
-        raise HTTPException(status_code=404, detail=f"Không có kết nối '{connection_id}'")
+        raise api_error(404, CONNECTION_NOT_FOUND, f"Không có kết nối '{connection_id}'")
 
     return _list_response()

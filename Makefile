@@ -1,18 +1,15 @@
-COMPOSE   := docker compose
-BASE      := -f docker-compose.yml
-GPU       := -f docker-compose.gpu.yml
+COMPOSE := docker compose -f docker-compose.yml
+GPU     := -f docker-compose.gpu.yml
 
-C_FULL    := $(COMPOSE) $(BASE) $(GPU)
-C_HYBRID  := $(COMPOSE) $(BASE) -f docker-compose.hybrid.yml $(GPU)
-C_WORKER  := $(COMPOSE) $(BASE) -f docker-compose.worker-node.yml $(GPU)
-C_GPUNODE := $(COMPOSE) $(BASE) -f docker-compose.gpu-node.yml $(GPU)
-C_DEMO    := $(COMPOSE) $(BASE) -f docker-compose.demo.yml
-C_PROD    := $(COMPOSE) $(BASE) -f docker-compose.prod.yml $(GPU)
+# Lệnh vận hành (down, ps, logs) phải thấy được mọi service bất kể đang chạy
+# kiểu nào, nên bật hết profile.
+ALL_PROFILES := full,hybrid,demo,worker-node,gpu-node,prod
+ANY := COMPOSE_PROFILES=$(ALL_PROFILES) $(COMPOSE)
 
 .PHONY: help setup setup-demo build pull-models \
         deploy-full deploy-hybrid deploy-worker-node deploy-gpu-node deploy-demo deploy-prod \
         down restart ps health logs logs-vllm logs-backend logs-worker logs-frontend \
-        test lint clean clean-all
+        config test lint clean clean-all
 
 help:
 	@echo "Cosmo ChatPDF"
@@ -27,7 +24,7 @@ help:
 	@echo "    make deploy-gpu-node     Máy B: truy xuất và trả lời (16GB+)"
 	@echo ""
 	@echo "  VẬN HÀNH"
-	@echo "    make down  make restart  make ps  make health"
+	@echo "    make down  make restart  make ps  make health  make config"
 	@echo "    make logs  make logs-vllm  make logs-backend  make logs-worker"
 	@echo ""
 	@echo "  CHUẨN BỊ"
@@ -53,48 +50,61 @@ setup-demo:
 	@test -f .env || cp .env.example .env
 
 build:
-	$(COMPOSE) $(BASE) build
+	COMPOSE_PROFILES=$(ALL_PROFILES) $(COMPOSE) build
 
 pull-models: setup
 	@bash scripts/pull_models.sh
 
 # --- Triển khai ---------------------------------------------------------
+#
+# Mỗi kiểu là một profile. Chỉ khác nhau ở tên profile, vài biến, và có kèm
+# docker-compose.gpu.yml hay không.
 
+# DEFAULT_VLM_PROVIDER=builtin: bản này có vLLM trong stack nên tạo sẵn kết
+# nối tới nó, người dùng không phải tự đoán endpoint nội bộ.
 deploy-full: setup
-	$(C_FULL) up -d --build
+	COMPOSE_PROFILES=full DEFAULT_VLM_PROVIDER=builtin \
+		$(COMPOSE) $(GPU) up -d --build
 	@$(MAKE) --no-print-directory _after-up KIND="tất cả tự host (24GB VRAM)"
 
 deploy-hybrid: setup
-	$(C_HYBRID) up -d --build
+	COMPOSE_PROFILES=hybrid $(COMPOSE) $(GPU) up -d --build
 	@echo ""
 	@echo "vLLM không chạy ở kiểu này. Vào giao diện > Cấu hình > thêm kết nối"
 	@echo "tới OpenAI hoặc Gemini, rồi tạo bộ tài liệu chọn kết nối đó."
 	@$(MAKE) --no-print-directory _after-up KIND="hybrid, VLM qua API ngoài (16GB VRAM)"
 
 deploy-worker-node: setup
-	$(C_WORKER) up -d --build
+	COMPOSE_PROFILES=worker-node $(COMPOSE) $(GPU) up -d --build
 	@echo ""
 	@echo "Máy A đang chạy: chỉ worker xử lý PDF."
 	@echo "Trên máy B chạy:"
-	@echo "  BACKEND_WORKER_URL=http://<ip-may-a>:$${WORKER_PORT:-2222}/upload_pdf/ make deploy-gpu-node"
+	@echo "  PDF_WORKER_ENDPOINT=http://<ip-may-a>:$${WORKER_PORT:-2222}/upload_pdf/ make deploy-gpu-node"
 
 deploy-gpu-node: setup
-	@test -n "$(BACKEND_WORKER_URL)" || \
-		(echo "Cần BACKEND_WORKER_URL trỏ tới worker ở máy A" && exit 1)
-	$(C_GPUNODE) up -d --build
+	@test -n "$(PDF_WORKER_ENDPOINT)" || \
+		(echo "Cần PDF_WORKER_ENDPOINT trỏ tới worker ở máy A" && exit 1)
+	COMPOSE_PROFILES=gpu-node PDF_WORKER_ENDPOINT=$(PDF_WORKER_ENDPOINT) \
+		$(COMPOSE) $(GPU) up -d --build
 	@$(MAKE) --no-print-directory _after-up KIND="máy GPU, worker ở xa"
 
+# Không kèm $(GPU): demo chạy được trên máy không có NVIDIA toolkit.
 deploy-demo: setup-demo
-	$(C_DEMO) up -d --build
+	COMPOSE_PROFILES=demo $(COMPOSE) up -d --build
 	@$(MAKE) --no-print-directory _after-up KIND="demo, không model"
+
+# PROD_PROFILE chọn kiểu chạy bên dưới Caddy: full (tự host VLM) hoặc hybrid.
+PROD_PROFILE ?= full
 
 deploy-prod: setup
 	@grep -q '^DOMAIN=.\+' .env || \
 		(echo "Cần DOMAIN trong .env để xin chứng chỉ TLS" && exit 1)
-	$(C_PROD) up -d --build
+	COMPOSE_PROFILES=$(PROD_PROFILE),prod BIND_ADDR=127.0.0.1 \
+		$(COMPOSE) $(GPU) up -d --build
 	@echo ""
-	@echo "Đang chạy chế độ production."
-	@echo "Chỉ cổng 80/443 phơi ra ngoài; backend, worker, vllm, qdrant nằm trong network nội bộ."
+	@echo "Đang chạy chế độ production (profile $(PROD_PROFILE),prod)."
+	@echo "Chỉ Caddy phơi 80/443. Backend, worker, vllm, qdrant chỉ nghe 127.0.0.1"
+	@echo "của host — debug bằng SSH tunnel, không vào được từ Internet."
 
 _after-up:
 	@echo ""
@@ -106,13 +116,19 @@ _after-up:
 # --- Vận hành -----------------------------------------------------------
 
 down:
-	$(COMPOSE) $(BASE) down
+	$(ANY) down
 
 restart:
-	$(COMPOSE) $(BASE) restart
+	$(ANY) restart
 
 ps:
-	$(COMPOSE) $(BASE) ps
+	$(ANY) ps
+
+# Kiểm cấu hình đã hợp lệ chưa mà không chạy gì. PROFILES=... để xem kiểu khác.
+PROFILES ?= $(ALL_PROFILES)
+
+config:
+	@COMPOSE_PROFILES=$(PROFILES) $(COMPOSE) $(GPU) config --services
 
 health:
 	@printf "vLLM     "; curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:$${VLLM_PORT:-3333}/v1/models 2>/dev/null || echo "không chạy"
@@ -122,19 +138,19 @@ health:
 	@printf "frontend "; curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:$${FRONTEND_PORT:-7860}/ 2>/dev/null || echo "không chạy"
 
 logs:
-	$(COMPOSE) $(BASE) logs -f
+	$(ANY) logs -f
 
 logs-vllm:
-	$(COMPOSE) $(BASE) logs -f vllm
+	$(ANY) logs -f vllm
 
 logs-backend:
-	$(COMPOSE) $(BASE) logs -f backend
+	$(ANY) logs -f backend
 
 logs-worker:
-	$(COMPOSE) $(BASE) logs -f worker
+	$(ANY) logs -f worker
 
 logs-frontend:
-	$(COMPOSE) $(BASE) logs -f frontend
+	$(ANY) logs -f frontend
 
 # --- Phát triển ---------------------------------------------------------
 
@@ -146,8 +162,8 @@ lint:
 	cd frontend && npx tsc -b
 
 clean:
-	$(COMPOSE) $(BASE) down
+	$(ANY) down
 
 clean-all:
-	$(COMPOSE) $(BASE) down -v
+	$(ANY) down -v
 	@echo "Đã xoá cả model đã tải — lần sau phải tải lại."

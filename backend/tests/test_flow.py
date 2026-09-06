@@ -68,6 +68,7 @@ def test_ban_dau_chua_tao_duoc_bo(client):
     response = client.get("/collections")
 
     assert response.json()["can_create"] is False
+    assert response.json()["missing_capabilities"] == ["vlm", "llm"]
     assert response.json()["collections"] == []
 
 
@@ -136,7 +137,7 @@ def test_nha_cung_cap_ngoai_bat_buoc_co_key(client):
     )
 
     assert response.status_code == 400
-    assert "API key" in response.json()["detail"]
+    assert response.json()["detail"]["code"] == "missing_api_key"
 
 
 def test_custom_bat_buoc_co_endpoint(client):
@@ -152,7 +153,7 @@ def test_custom_bat_buoc_co_endpoint(client):
     )
 
     assert response.status_code == 400
-    assert "endpoint" in response.json()["detail"].lower()
+    assert response.json()["detail"]["code"] == "missing_endpoint"
 
 
 def test_ten_ket_noi_phai_duy_nhat(client):
@@ -222,8 +223,45 @@ def test_tao_bo_voi_hai_ket_noi(client):
     assert body["is_ready"] is True
 
 
-def test_ket_noi_sai_kha_nang_thi_tu_choi(client):
-    """Kết nối chỉ khai 'llm' không dùng được làm VLM."""
+def test_chua_co_mo_hinh_nao_thi_bao_dieu_huong(client):
+    """409 + mã riêng để UI mở popup dẫn sang Cấu hình, không báo lỗi tại field."""
+    response = client.post(
+        "/collections",
+        json={
+            "name": "bo-som",
+            "vlm_connection_id": "bat-ky",
+            "llm_connection_id": "bat-ky",
+        },
+    )
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "no_models_configured"
+    assert detail["missing_capabilities"] == ["vlm", "llm"]
+
+
+def test_thieu_mot_loai_thi_bao_ro_thieu_loai_nao(client):
+    """Có LLM nhưng chưa có VLM: vẫn phải sang Cấu hình, và nói rõ thiếu VLM."""
+    llm_id = _create_connection(client, "Chỉ LLM", ["llm"])
+
+    response = client.post(
+        "/collections",
+        json={
+            "name": "bo-thieu-vlm",
+            "vlm_connection_id": llm_id,
+            "llm_connection_id": llm_id,
+        },
+    )
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "no_models_configured"
+    assert detail["missing_capabilities"] == ["vlm"]
+
+
+def test_du_hai_loai_nhung_chon_sai_thi_bao_tai_field(client):
+    """Đủ mô hình rồi thì lỗi chọn sai là lỗi field, không phải lỗi điều hướng."""
+    _create_connection(client, "VLM thật", ["vlm"])
     llm_only = _create_connection(client, "Chỉ LLM", ["llm"])
 
     response = client.post(
@@ -236,10 +274,13 @@ def test_ket_noi_sai_kha_nang_thi_tu_choi(client):
     )
 
     assert response.status_code == 400
-    assert "vlm" in response.json()["detail"].lower()
+    detail = response.json()["detail"]
+    assert detail["code"] == "connection_invalid"
+    assert "vlm" in detail["message"].lower()
 
 
 def test_ket_noi_khong_ton_tai_thi_tu_choi(client):
+    _create_connection(client, "VLM thật", ["vlm"])
     llm_id = _create_connection(client, "LLM", ["llm"])
 
     response = client.post(
@@ -252,6 +293,7 @@ def test_ket_noi_khong_ton_tai_thi_tu_choi(client):
     )
 
     assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "connection_invalid"
 
 
 @pytest.mark.parametrize("name", ["có dấu", "ten/co/slash", "-batdaubangdau", "", "a" * 64])
@@ -294,14 +336,16 @@ def test_chua_cau_hinh_bo_thi_khong_index_duoc(client):
     )
 
     assert response.status_code == 409
-    assert "chưa được cấu hình" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail["code"] == "collection_not_configured"
+    assert "chưa được cấu hình" in detail["message"]
 
 
 def test_chua_cau_hinh_bo_thi_khong_hoi_duoc(client):
     response = client.post("/ask", json={"query": "câu hỏi", "user_id": "chua-cau-hinh"})
 
     assert response.status_code == 400
-    assert "chưa được cấu hình" in response.json()["detail"]
+    assert "chưa được cấu hình" in response.json()["detail"]["message"]
 
 
 # --- Xoá kết nối đang được dùng -------------------------------------------
@@ -360,3 +404,16 @@ def test_key_khong_lo_o_bat_ky_endpoint_nao(client):
 
     for path in ("/connections", "/collections", "/collections/bo-kiem", "/settings"):
         assert SECRET_KEY not in client.get(path).text, f"Key bị lộ ở {path}"
+
+
+def test_settings_bao_trang_thai_theo_kho_ket_noi(client):
+    """Không lấy từ env nữa: bỏ key khỏi .env rồi thì env luôn rỗng."""
+    before = client.get("/settings").json()["models"]
+    assert before["vlm"]["api_key_configured"] is False
+    assert before["llm"]["api_key_configured"] is False
+
+    _create_connection(client, "Đa năng", ["vlm", "llm"])
+
+    after = client.get("/settings").json()["models"]
+    assert after["vlm"]["api_key_configured"] is True
+    assert after["llm"]["api_key_configured"] is True

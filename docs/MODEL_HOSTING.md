@@ -132,9 +132,9 @@ Model 78B cần tensor parallel qua nhiều GPU — thêm `--tensor-parallel-siz
 ```bash
 cd cosmo-chatpdf
 cp .env.example .env
-# Điền GEMINI_API_KEY, chọn VLM_MODEL_NAME theo VRAM
+# Điền CREDENTIALS_SECRET, chọn VLM_MODEL_NAME theo VRAM
 
-make up-gpu
+make deploy-full
 ```
 
 **Lần đầu mất 15–30 phút** vì phải tải:
@@ -177,7 +177,7 @@ Tránh việc container chờ tải model lúc khởi động:
 make pull-models
 ```
 
-Lệnh này tải VLM và ColQwen vào volume `hf-cache` trước, rồi `make up-gpu` sẽ khởi động nhanh.
+Lệnh này tải VLM và ColQwen vào volume `hf-cache` trước, rồi `make deploy-full` sẽ khởi động nhanh.
 
 Với model gated (Llama, một số bản Qwen) cần token:
 
@@ -197,7 +197,7 @@ Nếu đã có vLLM chạy trên máy khác:
 VLM_ENDPOINT=http://192.168.1.50:8000/v1
 VLM_MODEL_NAME=OpenGVLab/InternVL3-78B-AWQ
 
-make up-external-vlm
+make deploy-hybrid   # không khởi động vllm trong stack
 ```
 
 Stack sẽ không khởi động service `vllm`, tiết kiệm toàn bộ VRAM cho ColQwen và PaddleOCR.
@@ -225,7 +225,7 @@ vllm serve OpenGVLab/InternVL3-8B \
   --host 0.0.0.0 --port 3333
 ```
 
-Rồi `VLM_ENDPOINT=http://host.docker.internal:3333/v1` và chạy `make up-external-vlm`.
+Rồi `make deploy-hybrid` và thêm kết nối `custom` trên giao diện với endpoint `http://host.docker.internal:3333/v1`.
 
 ---
 
@@ -293,7 +293,7 @@ docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi
 Lỗi thì cài NVIDIA Container Toolkit:
 https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 
-Và nhớ dùng `make up-gpu`, không phải `make up` — bản `up` không cấp GPU.
+Và nhớ dùng một trong các lệnh `make deploy-*` — chỉ `deploy-demo` là không cấp GPU.
 
 ---
 

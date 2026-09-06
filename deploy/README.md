@@ -13,6 +13,40 @@ Chia deploy theo đó, không theo "frontend/backend".
 Điểm quan trọng: **vllm là thứ tốn VRAM mà bỏ được** — thay bằng API ngoài
 (OpenAI, Gemini) thì tiết kiệm 8GB và chất lượng thường tốt hơn.
 
+## Chỉ có hai file compose
+
+Mọi kiểu triển khai nằm trong `docker-compose.yml`, chọn bằng
+[profile của Compose](https://docs.docker.com/compose/how-tos/profiles/):
+
+| Profile | Service được bật |
+|---|---|
+| `full` | qdrant, worker, backend, vllm, frontend |
+| `hybrid` | qdrant, worker, backend, frontend |
+| `gpu-node` | qdrant, backend, frontend |
+| `worker-node` | worker |
+| `demo` | qdrant, backend-demo, frontend |
+| `prod` | caddy (bật kèm `full` hoặc `hybrid`) |
+
+`docker-compose.gpu.yml` là overlay duy nhất còn lại, và nó **buộc phải** là
+file riêng: khối `deploy.resources.reservations.devices` khiến container không
+khởi động nổi trên máy chưa cài NVIDIA Container Toolkit — kể cả khi đặt
+`count: 0`, Docker vẫn đi tìm driver rồi báo
+`could not select device driver "nvidia"`. Không biến môi trường nào tắt được
+khối đó, nên cách duy nhất là bỏ hẳn file khi chạy trên máy không GPU.
+
+Dùng `make deploy-*` là xong, không cần nhớ profile. Muốn gọi tay:
+
+```bash
+COMPOSE_PROFILES=hybrid docker compose \
+    -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```
+
+Xem một profile sẽ bật những gì mà không chạy gì cả:
+
+```bash
+make config PROFILES=demo
+```
+
 ---
 
 ## Bốn kiểu triển khai
@@ -41,15 +75,21 @@ PaddleOCR + layout       ~4.5 GB
 ```
 Sát ngưỡng: đừng index sách lớn trong khi có người truy vấn.
 
+Kiểu này tự đặt `DEFAULT_VLM_PROVIDER=builtin`, nên khi service lên đã có sẵn
+một kết nối tên **"vLLM tự host (built-in)"** trỏ vào `http://vllm:8000/v1`.
+Tạo bộ tài liệu và chọn nó là dùng được ngay, không phải nhập API key nào.
+
+Kết nối đó khai cả `vlm` và `llm` vì vLLM nói giao thức OpenAI: cùng một
+endpoint vừa đọc ảnh trả lời, vừa sửa được cây mục lục. Sửa endpoint hay model
+trên giao diện thì lần khởi động sau không bị ghi đè; xoá đi thì nó quay lại
+(kết nối này mô tả thực tế của bản deploy, muốn bỏ hẳn thì đặt
+`DEFAULT_VLM_PROVIDER=none`).
+
 ---
 
 ### 2. `hybrid` — GPU vừa, VLM dùng API ngoài ⭐ *khuyến nghị*
 
 ```bash
-# .env
-DEFAULT_VLM_PROVIDER=gemini
-GEMINI_API_KEY=...
-
 make deploy-hybrid
 ```
 
@@ -62,11 +102,18 @@ Chỉ tự host phần **bắt buộc phải có GPU** (OCR, layout, embedding).
 | Service | qdrant, worker, backend, frontend |
 | Đánh đổi | Ảnh-mục gửi lên nhà cung cấp API |
 
+Không có API key nào trong `.env`. Sau khi service lên:
+
+1. Mở giao diện > **Cấu hình** > thêm kết nối tới OpenAI hoặc Gemini
+2. **Tạo bộ tài liệu**, chọn kết nối đó cho bộ
+3. Tải PDF lên
+
+Chưa làm bước 1 và 2 thì `/upload_files` trả 409 — chặn ngay thay vì để chờ
+20 phút index rồi mới báo thiếu mô hình.
+
 Đây là kiểu hợp lý nhất cho phần lớn trường hợp: OCR và embedding **phải**
 chạy local (chúng xử lý toàn bộ tài liệu), còn VLM chỉ đọc 3-5 ảnh mỗi câu hỏi
 nên gửi ra ngoài rẻ và nhanh hơn tự host.
-
-Người dùng vẫn đổi được provider trên giao diện mà không cần deploy lại.
 
 ---
 
@@ -77,7 +124,7 @@ Người dùng vẫn đổi được provider trên giao diện mà không cần
 make deploy-worker-node
 
 # Máy B (GPU mạnh, 16GB+): truy xuất và trả lời
-BACKEND_WORKER_URL=http://may-a:2222/upload_pdf/ make deploy-gpu-node
+PDF_WORKER_ENDPOINT=http://may-a:2222/upload_pdf/ make deploy-gpu-node
 ```
 
 Tách vì hai việc có **nhịp sử dụng khác nhau**: index chạy theo đợt rồi nghỉ,
@@ -86,7 +133,10 @@ truy vấn chạy liên tục. Máy A rảnh phần lớn thời gian nên dùng
 | Máy | Service | VRAM |
 |---|---|---|
 | A | worker | 8 GB |
-| B | qdrant, backend, vllm, frontend | 16-24 GB |
+| B | qdrant, backend, frontend | 16-24 GB |
+
+Máy A phơi cổng worker ra mạng. Nếu không phải mạng nội bộ kín, giới hạn lại:
+`BIND_ADDR=10.0.0.5 make deploy-worker-node`.
 
 ---
 
@@ -102,7 +152,10 @@ Dùng để xem giao diện, phát triển frontend, hoặc demo cho người kh
 | | |
 |---|---|
 | VRAM | 0 |
-| Service | qdrant, demo-backend, frontend |
+| Service | qdrant, backend-demo, frontend |
+
+`backend-demo` mang alias mạng `backend` nên `nginx.conf` của frontend không
+phải sửa gì. Đây cũng là kiểu duy nhất không kèm `docker-compose.gpu.yml`.
 
 ---
 
@@ -121,19 +174,18 @@ Chỉ muốn xem giao diện: `demo`.
 
 ## Đưa lên server công khai
 
-**Mặc định của `docker-compose.yml` không an toàn cho server có IP công khai** —
-nó phơi cả 6 cổng ra `0.0.0.0`, trong đó Qdrant **không có xác thực**.
-
-Dùng `docker-compose.prod.yml`:
+**Mặc định không an toàn cho server có IP công khai** — nó phơi cả 6 cổng ra
+`0.0.0.0`, trong đó Qdrant **không có xác thực**.
 
 ```bash
 make deploy-prod
 ```
 
 Nó làm ba việc:
-1. Chỉ phơi cổng 80/443 ra ngoài; qdrant, worker, backend, vllm chỉ nằm trong
-   network nội bộ của Docker
-2. Caddy đứng trước, tự xin chứng chỉ Let's Encrypt
+1. Đặt `BIND_ADDR=127.0.0.1`, nên qdrant, worker, backend, vllm chỉ nghe
+   loopback của host — vào được bằng SSH tunnel để debug, không vào được từ
+   Internet
+2. Caddy đứng trước ở 80/443, tự xin chứng chỉ Let's Encrypt
 3. Bật xác thực cơ bản cho toàn site
 
 ```bash
@@ -144,17 +196,22 @@ BASIC_AUTH_USER=cosmo
 BASIC_AUTH_HASH=$(docker run --rm caddy caddy hash-password --plaintext 'matkhau')
 ```
 
+Mặc định prod chạy trên profile `full`. Muốn dùng VLM API ngoài:
+
+```bash
+make deploy-prod PROD_PROFILE=hybrid
+```
+
 ### Nếu `agent_tung` cần gọi backend
 
-Ở chế độ prod, cổng 2005 và 3333 **không còn phơi ra ngoài**. Hai cách:
+Ở chế độ prod, cổng 2005 và 3333 chỉ nghe `127.0.0.1`. Ba cách:
 
-- **Cùng máy**: cho agent chạy trong network `cosmo_default`, gọi
-  `http://backend:8000` và `http://vllm:8000/v1`
+- **Cùng máy, cùng host**: gọi `http://127.0.0.1:2005` như bình thường
+- **Cùng máy, trong Docker**: cho agent chạy trong network `cosmo_default`,
+  gọi `http://backend:8000` và `http://vllm:8000/v1`
 - **Khác máy**: mở cổng cho riêng IP của agent
-  ```yaml
-  backend:
-    ports:
-      - "10.0.0.5:2005:8000"   # chỉ IP nội bộ này
+  ```bash
+  BIND_ADDR=10.0.0.5 make deploy-prod
   ```
 
 ---
@@ -164,9 +221,9 @@ BASIC_AUTH_HASH=$(docker run --rm caddy caddy hash-password --plaintext 'matkhau
 | Service | Cổng trong | Cổng ra (dev) | Cổng ra (prod) |
 |---|---|---|---|
 | frontend | 7860 | 7860 | qua Caddy 443 |
-| backend | 8000 | 2005 | không phơi |
-| worker | 8001 | 2222 | không phơi |
-| vllm | 8000 | 3333 | không phơi |
-| qdrant | 6333/6334 | 6333/6334 | không phơi |
+| backend | 8000 | 2005 | chỉ 127.0.0.1 |
+| worker | 8001 | 2222 | chỉ 127.0.0.1 |
+| vllm | 8000 | 3333 | chỉ 127.0.0.1 |
+| qdrant | 6333/6334 | 6333/6334 | chỉ 127.0.0.1 |
 
 Cổng dev map khớp bản `chatpdf_ver_2` cũ nên client hiện có không phải sửa.

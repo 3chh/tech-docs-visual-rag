@@ -1,13 +1,18 @@
 # Cấp GPU cho vllm, backend, worker.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
-#   (hoặc: make up-gpu)
+# Đây là file overlay duy nhất còn lại, và nó buộc phải riêng: khối
+# `deploy.resources.reservations.devices` khiến container không khởi động được
+# trên máy chưa cài NVIDIA Container Toolkit, kể cả khi count=0 — Docker vẫn
+# đi tìm driver rồi báo `could not select device driver "nvidia"`. Không có
+# biến môi trường nào tắt được khối này, nên cách duy nhất là bỏ hẳn file.
+#
+# Bỏ file này ra khi chạy trên máy không có GPU (profile demo).
 #
 # Yêu cầu: NVIDIA Container Toolkit đã cài trên host.
 # Kiểm tra:  docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi
 #
-# Mặc định cả ba dùng chung GPU 0. Xem docs/MODEL_HOSTING.md để biết cách
-# chia VRAM, hoặc đặt device_ids khác nhau nếu máy có nhiều GPU.
+# Mặc định cả ba dùng chung GPU 0. Xem docs/MODEL_HOSTING.md để biết cách chia
+# VRAM, hoặc đặt GPU_COUNT nếu máy có nhiều GPU.
 
 x-gpu: &gpu
   deploy:
@@ -15,7 +20,7 @@ x-gpu: &gpu
       reservations:
         devices:
           - driver: nvidia
-            count: 1
+            count: ${GPU_COUNT:-1}
             capabilities: [gpu]
 
 services:

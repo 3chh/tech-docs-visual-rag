@@ -94,7 +94,7 @@ Thay đổi trong các file này chỉ gồm: import, `print` → `logger`, và 
 | Secret | Trong `config.yaml` | Chỉ từ env, fail-fast khi thiếu |
 | Log | `print` | `logging` có level |
 | Vector DB client | Tạo mới mỗi request | Cache theo collection |
-| Chạy | Thủ công 3 tiến trình + vLLM riêng | `make up-gpu` |
+| Chạy | Thủ công 3 tiến trình + vLLM riêng | `make deploy-full` |
 
 Cổng đã map khớp bản cũ nên **client hiện có không phải đổi số cổng**.
 
