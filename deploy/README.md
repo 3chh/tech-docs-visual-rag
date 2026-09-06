@@ -112,18 +112,20 @@ Mọi thứ tự host, tài liệu không rời khỏi máy.
 
 | | |
 |---|---|
-| VRAM tối thiểu | **18 GB** (vLLM ~8 + ColQwen ~10; worker chạy CPU) |
+| VRAM tối thiểu | **32 GB** (vLLM ~20 + ColQwen ~10; worker chạy CPU) |
 | Service | qdrant, worker, backend, vllm, frontend |
 | Dùng khi | Tài liệu nhạy cảm, không được gửi ra ngoài |
 
 Phân bổ VRAM:
 ```
-vLLM (InternVL3-8B)      ~8.4 GB   (gpu-memory-utilization 0.35)
-ColQwen 2.5-3B           ~9.5 GB
-PaddleOCR + layout          0      (CPU)
+vLLM (InternVL3-8B)     ~20 GB   (weights 16GB bf16 + KV cache, util 0.60)
+ColQwen 2.5-3B          ~10 GB
+PaddleOCR + layout         0      (CPU)
                         ─────────
-                         ~17.9 GB
+                         ~30 GB / 32 GB
 ```
+Sát ngưỡng. Card nhỏ hơn 32GB thì đổi `VLM_MODEL_NAME` sang
+`OpenGVLab/InternVL3-2B` (~4.4GB), hoặc dùng `hybrid` cho VLM đi API ngoài.
 
 Kiểu này tự đặt `DEFAULT_VLM_PROVIDER=builtin`, nên khi service lên đã có sẵn
 một kết nối tên **"vLLM tự host (built-in)"** trỏ vào `http://vllm:8000/v1`.
@@ -148,7 +150,7 @@ Chỉ tự host phần **bắt buộc phải có GPU** (OCR, layout, embedding).
 
 | | |
 |---|---|
-| VRAM tối thiểu | **10 GB** (chỉ ColQwen) |
+| VRAM tối thiểu | **10 GB** (chỉ ColQwen; worker CPU, VLM API ngoài) |
 | Service | qdrant, worker, backend, frontend |
 | Đánh đổi | Ảnh-mục gửi lên nhà cung cấp API |
 

@@ -1,7 +1,7 @@
 # Cosmo ChatPDF — một file cho mọi kiểu triển khai, chọn bằng profile.
 #
 #   make deploy-hybrid    GPU 10GB, VLM qua API ngoài      <- khuyến nghị
-#   make deploy-full      tất cả tự host, GPU 18GB
+#   make deploy-full      tất cả tự host, GPU 32GB
 #   make deploy-demo      không model, chỉ xem giao diện
 #   make deploy-prod      server công khai, HTTPS
 #
@@ -52,8 +52,10 @@ services:
     command:
       - --model=${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
       - --served-model-name=${VLM_MODEL_NAME:-OpenGVLab/InternVL3-8B}
-      # Chừa VRAM cho ColQwen (~10GB, backend). Worker chạy CPU nên không tranh.
-      - --gpu-memory-utilization=${VLLM_GPU_MEMORY_UTILIZATION:-0.45}
+      # Tỉ lệ VRAM của CẢ card mà vLLM được dùng (weights + KV cache).
+      # InternVL3-8B bf16 nặng ~16GB nên 0.6 là sàn trên card 32GB; card 24GB
+      # không đủ cho model này, phải đổi VLM_MODEL_NAME sang bản nhỏ hơn.
+      - --gpu-memory-utilization=${VLLM_GPU_MEMORY_UTILIZATION:-0.60}
       - --max-model-len=${VLLM_MAX_MODEL_LEN:-8192}
       - --trust-remote-code
       - --host=0.0.0.0
