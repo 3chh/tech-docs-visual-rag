@@ -56,3 +56,6 @@ logs/
 node_modules/
 dist/
 .vite/
+
+# Build artifact cua tsc
+*.tsbuildinfo
