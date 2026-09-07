@@ -17,6 +17,20 @@ phần trả lời câu hỏi vẫn GPU đầy đủ. Số luồng đặt bằng
 Điểm quan trọng: **vllm là thứ tốn VRAM mà bỏ được** — thay bằng API ngoài
 (OpenAI, Gemini) thì tiết kiệm 8GB và chất lượng thường tốt hơn.
 
+## Cấu hình embedding thuộc từng bộ tài liệu
+
+`EMBEDDING_MAX_NUM_VISUAL_TOKENS` và `EMBEDDING_MIN_WIDTH` trong `.env` chỉ là
+**mặc định cho bộ mới**. Mỗi bộ chốt giá trị riêng lúc tạo rồi đóng băng, vì
+vector chỉ so được với vector cùng tham số — mà mỗi bộ là một collection riêng
+trong Qdrant nên ràng buộc đó áp theo bộ, không phải toàn server.
+
+Hai tham số này chỉ chạm processor (quy tắc resize ảnh) nên nhiều bộ khác nhau
+vẫn dùng chung một model, không tốn thêm VRAM.
+
+`EMBEDDING_TYPE` và `EMBEDDING_MODEL_NAME` thì là toàn cục thật: chúng quyết
+định weights nào nạp vào VRAM. Đổi chúng làm mọi bộ đã index báo lệch và ngừng
+tra cứu được — đó là cố ý, vì trước đây lỗi này im lặng trả kết quả rác.
+
 ## Chỉ có hai file compose
 
 Mọi kiểu triển khai nằm trong `docker-compose.yml`, chọn bằng
