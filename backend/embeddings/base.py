@@ -1,6 +1,6 @@
 """Lớp cơ sở cho các embedding manager theo kiến trúc ColPali (multi-vector)."""
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import List
 
 import torch
@@ -12,18 +12,85 @@ logger = get_logger(__name__)
 
 
 class BaseEmbeddingManager(ABC):
-    """Đăng ký các manager con vào registry để chọn động theo config."""
+    """Đăng ký các manager con vào registry để chọn động theo config.
+
+    Nạp model và dựng processor tách làm hai bước vì chúng có vòng đời khác
+    nhau: weights nặng vài GB VRAM và chỉ phụ thuộc `model_name`, còn
+    processor rẻ và phụ thuộc `max_num_visual_tokens`/`min_width` của từng bộ
+    tài liệu. Nhờ tách ra, nhiều bộ với tham số resize khác nhau vẫn dùng
+    chung một model.
+    """
 
     registry: dict[str, type["BaseEmbeddingManager"]] = {}
+
+    #: Lớp model và processor của colpali-engine.
+    model_cls = None
+    processor_cls = None
+    #: Model này nhận attn_implementation khi nạp hay không.
+    accepts_attn_impl = True
+    #: Chỉ LongColQwen hiểu min_width (ghim chiều rộng, chiều cao tự do).
+    supports_min_width = False
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         if cls.__name__ != "BaseEmbeddingManager":
             cls.registry[cls.__name__.lower()] = cls
 
-    @abstractmethod
-    def __init__(self, device: str, model_name: str, max_num_visual_tokens: int = None, **kwargs):
-        pass
+    def __init__(
+        self,
+        device: str = "cuda",
+        model_name: str = "",
+        max_num_visual_tokens: int | None = None,
+        min_width: int | None = None,
+        model=None,
+    ):
+        self.device = device
+        self.model_name = model_name
+        # `model` cho phép chia sẻ weights đã nạp giữa các manager khác
+        # processor. Xem embeddings/__init__.py.
+        self.model = model if model is not None else self.load_model(device, model_name)
+        self.processor = self.build_processor(model_name, max_num_visual_tokens, min_width)
+
+    @classmethod
+    def load_model(cls, device: str, model_name: str):
+        kwargs = {"torch_dtype": torch.bfloat16, "device_map": device}
+
+        if cls.accepts_attn_impl:
+            from transformers.utils.import_utils import is_flash_attn_2_available
+
+            kwargs["attn_implementation"] = (
+                "flash_attention_2" if is_flash_attn_2_available() else None
+            )
+
+        logger.info(
+            "Nạp %s | model=%s device=%s attn=%s",
+            cls.__name__,
+            model_name,
+            device,
+            kwargs.get("attn_implementation"),
+        )
+        return cls.model_cls.from_pretrained(model_name, **kwargs).eval()
+
+    @classmethod
+    def build_processor(
+        cls,
+        model_name: str,
+        max_num_visual_tokens: int | None = None,
+        min_width: int | None = None,
+    ):
+        """Dựng processor mới. Rẻ: chỉ là cấu hình resize và tokenizer.
+
+        Truyền qua `from_pretrained` chứ không sửa thuộc tính sau khi tạo —
+        `max_num_visual_tokens` được colpali-engine dịch sang nhiều trường
+        bên trong image_processor, tự đoán trường nào là sai.
+        """
+        kwargs = {}
+        if max_num_visual_tokens is not None:
+            kwargs["max_num_visual_tokens"] = max_num_visual_tokens
+        if min_width is not None and cls.supports_min_width:
+            kwargs["min_width"] = min_width
+
+        return cls.processor_cls.from_pretrained(model_name, **kwargs)
 
     def get_images(self, paths: list[str]) -> List[Image.Image]:
         return [Image.open(path) for path in paths]

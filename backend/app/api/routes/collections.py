@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from ..errors import (
     COLLECTION_EXISTS,
     EMBEDDING_IMMUTABLE,
+    EMBEDDING_NOT_SERVED,
     COLLECTION_NOT_FOUND,
     CONNECTION_INVALID,
     INVALID_NAME,
@@ -206,6 +207,16 @@ async def create_new_collection(request: CreateCollectionRequest) -> CollectionO
             missing_capabilities=missing,
         )
 
+    embedding = resolve_embedding(request.embedding)
+
+    # `max_num_visual_tokens` và `min_width` chỉ chạm processor nên mỗi bộ đặt
+    # khác nhau được, dùng chung model. Còn `type` và `model_name` quyết định
+    # model nào nạp vào VRAM — cho phép chọn tự do nghĩa là một bộ mới có thể
+    # nạp thêm ~7.5GB, và bộ đó sẽ báo lệch ngay vì server chạy model khác.
+    mismatch = _embedding_mismatch(embedding)
+    if mismatch:
+        raise api_error(400, EMBEDDING_NOT_SERVED, mismatch)
+
     try:
         resolve_connection(request.vlm_connection_id, "vlm")
         resolve_connection(request.llm_connection_id, "llm")
@@ -220,7 +231,7 @@ async def create_new_collection(request: CreateCollectionRequest) -> CollectionO
             description=request.description,
             processing=request.processing.model_dump(exclude_none=True),
             ask=request.ask.model_dump(exclude_none=True),
-            embedding=resolve_embedding(request.embedding),
+            embedding=embedding,
         )
     except InvalidCollectionName as e:
         raise api_error(422, INVALID_NAME, str(e)) from e

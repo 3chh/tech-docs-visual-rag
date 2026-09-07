@@ -72,8 +72,16 @@ def build_vector_manager(
     )
 
 
-def get_vector_manager(collection: str, create_collection: bool = False) -> BaseVectorManager:
-    """Cache client theo collection — bản gốc tạo mới mỗi request, rất tốn."""
+def get_vector_manager(
+    collection: str,
+    create_collection: bool = False,
+    emb: EmbeddingSettings | None = None,
+) -> BaseVectorManager:
+    """Cache client theo collection — bản gốc tạo mới mỗi request, rất tốn.
+
+    `emb` là cấu hình embedding của bộ tài liệu. Không đưa vào khoá cache vì
+    mỗi bộ chỉ có một cấu hình và nó đóng băng sau khi tạo.
+    """
     key = f"{collection}:{create_collection}"
     cached = _cache.get(key)
     if cached is not None:
@@ -82,7 +90,7 @@ def get_vector_manager(collection: str, create_collection: bool = False) -> Base
     with _lock:
         if key not in _cache:
             logger.info("Khởi tạo vector manager cho collection %r", collection)
-            _cache[key] = build_vector_manager(collection, create_collection)
+            _cache[key] = build_vector_manager(collection, create_collection, emb=emb)
     return _cache[key]
 
 

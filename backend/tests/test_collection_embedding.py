@@ -214,3 +214,76 @@ def test_khong_lech_thi_bo_van_san_sang(client):
     body = client.get("/collections/bo-khop").json()
 
     assert body["is_ready"] is True, body["blocked_reason"]
+
+
+# --- chọn model mà server không nạp --------------------------------------
+
+
+def test_khong_chon_duoc_model_server_khong_nap(client):
+    """max_num_visual_tokens/min_width thì tự do, model thì không.
+
+    Hai tham số đầu chỉ chạm processor nên nhiều bộ dùng chung một model.
+    Còn `model_name` quyết định weights nào vào VRAM — cho chọn tự do nghĩa là
+    một bộ mới nạp thêm ~7.5GB, và bộ đó lệch ngay với server đang chạy.
+    """
+    connection_id = _connection(client)
+
+    response = client.post(
+        "/collections",
+        json={
+            "name": "bo-model-khac",
+            "vlm_connection_id": connection_id,
+            "llm_connection_id": connection_id,
+            "embedding": {"model_name": "vidore/colqwen2.5-v0.2"},
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "embedding_not_served"
+
+
+def test_van_chon_duoc_tham_so_resize(client):
+    """Hai tham số rẻ thì phải cho chọn, đó là điểm của cả tính năng này."""
+    body = _create_ok(client, "bo-resize", {"max_num_visual_tokens": 4096, "min_width": 800})
+
+    assert body["embedding"]["max_num_visual_tokens"] == 4096
+    assert body["embedding"]["min_width"] == 800
+    assert body["is_ready"] is True, body["blocked_reason"]
+
+
+def test_index_dung_cau_hinh_embedding_cua_bo(client, monkeypatch):
+    """Ghi lại 4096 mà index bằng 8192 thì bản ghi đó là lời nói dối."""
+    from unittest.mock import MagicMock
+
+    from backend.app.services import indexing as indexing_module
+
+    seen: dict = {}
+
+    def fake_get_embedding_manager(overrides=None):
+        seen["overrides"] = overrides
+        emb = MagicMock()
+        emb.process_images.return_value = ([], [], [])
+        return emb
+
+    monkeypatch.setattr(
+        indexing_module, "get_embedding_manager", fake_get_embedding_manager
+    )
+    monkeypatch.setattr(
+        indexing_module, "get_vector_manager", lambda *a, **k: MagicMock()
+    )
+    monkeypatch.setattr(
+        indexing_module.IndexingService,
+        "_call_worker",
+        lambda self, media_dir, pdf_path, custom_config: [],
+    )
+
+    _create_ok(client, "bo-index", {"max_num_visual_tokens": 4096})
+
+    response = client.post(
+        "/upload_files",
+        files={"files": ("a.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        data={"user_id": "bo-index", "db_name": "bo-index", "metadata": "[{}]"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert seen["overrides"]["max_num_visual_tokens"] == 4096

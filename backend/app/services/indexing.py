@@ -10,7 +10,7 @@ from ...core.config import get_settings
 from ...core.logging import get_logger
 from ...core.merge import deep_merge
 from ...core.providers import resolve_connection
-from ...embeddings import get_embedding_manager
+from ...embeddings import embedding_settings_for, get_embedding_manager
 from ...vectordb import get_vector_manager
 
 logger = get_logger(__name__)
@@ -29,7 +29,13 @@ class IndexingService:
         # phát hiện thiếu mô hình sau khi đã chờ 20 phút xử lý xong.
         self.config = require_config(collection)
 
-        self.db_manager = get_vector_manager(collection, create_collection=create_collection)
+        # Truyền cấu hình embedding của bộ: doc_dim tính từ
+        # max_num_visual_tokens, mà Milvus dùng nó để chia batch truy vấn.
+        self.db_manager = get_vector_manager(
+            collection,
+            create_collection=create_collection,
+            emb=embedding_settings_for(self.config.embedding),
+        )
 
     def _call_worker(self, media_dir: str, pdf_path: str, custom_config: dict | None) -> list[dict]:
         """Gọi PDF worker, nhận metadata của từng ảnh-mục."""
@@ -109,7 +115,9 @@ class IndexingService:
 
         # file_id đảm bảo re-index cùng file ghi đè đúng điểm cũ thay vì nhân bản.
         file_id = hashlib.md5(pdf_path.encode()).hexdigest()[:8]
-        emb = get_embedding_manager()
+        # Cấu hình embedding của bộ, không phải của server: bộ này đã ghi lại
+        # tham số lúc tạo và mọi tài liệu trong bộ phải embed cùng tham số đó.
+        emb = get_embedding_manager(self.config.embedding)
         batching = self.settings.embedding.batching_kwargs()
         payloads = self._build_payloads(full_metadatas, metadata)
 

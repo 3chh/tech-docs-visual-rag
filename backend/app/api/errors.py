@@ -22,6 +22,8 @@ MISSING_API_KEY = "missing_api_key"
 MISSING_ENDPOINT = "missing_endpoint"
 # Cấu hình embedding của bộ đã chốt, đổi là phải index lại.
 EMBEDDING_IMMUTABLE = "embedding_immutable"
+# Bộ xin model embedding mà server không nạp.
+EMBEDDING_NOT_SERVED = "embedding_not_served"
 
 
 def api_error(status_code: int, code: str, message: str, **extra: Any) -> HTTPException:
