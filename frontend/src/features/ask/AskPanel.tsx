@@ -13,12 +13,6 @@ import { useI18n } from "@/lib/i18n";
 import { AnswerBlock } from "./AnswerBlock";
 import { AskComposer } from "./AskComposer";
 
-const SAMPLE_QUESTIONS = [
-  "Mục nào quy định về tải trọng thiết kế?",
-  "Hệ số an toàn lấy theo bảng nào?",
-  "Công thức tính ứng suất uốn ở mục nào?",
-];
-
 interface AskPanelProps {
   collection: string;
   options: AskPreferences;
@@ -183,7 +177,7 @@ export function AskPanel({
                 description={t("empty_chat_desc")}
                 action={
                   <ul className="w-full max-w-md space-y-2 mt-4">
-                    {SAMPLE_QUESTIONS.map((question) => (
+                    {[t("sample_q1"), t("sample_q2"), t("sample_q3")].map((question) => (
                       <li key={question}>
                         <button
                           type="button"

@@ -56,7 +56,7 @@ export function DocumentsPanel({
 }) {
   const toc = useTableOfContents(collection);
   const upload = useUploadFiles();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
 
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [rejected, setRejected] = useState<string[]>([]);
@@ -143,7 +143,7 @@ export function DocumentsPanel({
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {totals.books} cuốn · {totals.pages} trang · {totals.sections} điều khoản
+            {totals.books} {t("doc_stat_books")} · {totals.pages} {t("doc_stat_pages")} · {totals.sections} {t("doc_stat_sections")}
           </p>
         </div>
 
@@ -156,7 +156,7 @@ export function DocumentsPanel({
             className="h-8 gap-1.5 text-xs text-foreground hover:bg-muted font-medium"
           >
             <FileSliders className="size-3.5 text-emerald-600" />
-            <span>Cấu hình bộ tài liệu</span>
+            <span>{t("doc_configure_btn")}</span>
           </Button>
 
           {/* Nút Tạo bộ tài liệu mới */}
@@ -166,7 +166,7 @@ export function DocumentsPanel({
             className="h-8 gap-1.5 text-xs bg-emerald-600 text-white hover:bg-emerald-700 font-medium"
           >
             <FilePlus2 className="size-3.5" />
-            <span>Tạo bộ mới</span>
+            <span>{t("doc_create_btn")}</span>
           </Button>
         </div>
       </header>
@@ -190,9 +190,9 @@ export function DocumentsPanel({
       ) : (
         books.length > 0 && (
           <dl className="grid grid-cols-3 gap-2.5">
-            <StatTile icon={BookMarked} label="Cuốn tài liệu" value={totals.books} />
-            <StatTile icon={Layers} label="Mục điều khoản" value={totals.sections} />
-            <StatTile icon={FileStack} label="Tổng số trang" value={totals.pages} />
+            <StatTile icon={BookMarked} label={language === "vi" ? "Cuốn tài liệu" : "Documents"} value={totals.books} />
+            <StatTile icon={Layers} label={language === "vi" ? "Mục điều khoản" : "Sections"} value={totals.sections} />
+            <StatTile icon={FileStack} label={language === "vi" ? "Tổng số trang" : "Total Pages"} value={totals.pages} />
           </dl>
         )
       )}

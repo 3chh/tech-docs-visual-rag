@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCollectionConfig, useUpdateCollection } from "@/hooks/use-api";
 import { ApiError } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import type { CollectionEmbedding, CollectionOut } from "@/lib/types";
 
 import {
@@ -47,6 +48,7 @@ export function CollectionSettingsDialog({
 }) {
   const { data: config, isLoading } = useCollectionConfig(open ? collection : undefined);
   const update = useUpdateCollection();
+  const { t } = useI18n();
 
   const [draft, setDraft] = useState<CollectionDraft>(EMPTY_DRAFT);
   const [description, setDescription] = useState("");
@@ -99,7 +101,7 @@ export function CollectionSettingsDialog({
             </div>
             <div className="min-w-0">
               <DialogTitle className="text-base font-semibold">
-                Cấu hình bộ tài liệu
+                {t("col_settings_title")}
               </DialogTitle>
               <DialogDescription className="truncate font-mono text-sm">
                 {collection}
@@ -126,9 +128,8 @@ export function CollectionSettingsDialog({
                   aria-hidden
                 />
                 <p className="text-sm">
-                  Bộ <span className="font-mono">{collection}</span> chưa được cấu
-                  hình trên server. Tạo lại bộ này để chọn mô hình cho nó — chưa
-                  có cấu hình thì không thêm được tài liệu.
+                  <span className="font-mono font-semibold">{collection}</span>{" "}
+                  {t("col_settings_not_configured")}
                 </p>
               </div>
             </div>
@@ -150,14 +151,14 @@ export function CollectionSettingsDialog({
                 >
                   <p className="text-sm">{config.blocked_reason}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Chọn lại mô hình bên dưới rồi lưu.
+                    {t("col_settings_select_model_hint")}
                   </p>
                 </div>
               )}
 
               <div className="space-y-1">
                 <Label htmlFor="col-desc" className="text-sm">
-                  Tên hiển thị
+                  {t("col_settings_display_name")}
                 </Label>
                 <Input
                   id="col-desc"
@@ -190,16 +191,15 @@ export function CollectionSettingsDialog({
 
               <div className="border-t pt-4">
                 <p className="mb-2 text-sm font-medium">
-                  Tham số xử lý
+                  {t("col_settings_processing_params")}
                   {overrideCount > 0 && (
                     <span className="ml-1.5 font-normal text-muted-foreground">
-                      ({overrideCount} đã đổi)
+                      ({overrideCount} {t("col_settings_changed_suffix")})
                     </span>
                   )}
                 </p>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  Tham số áp cho tài liệu thêm vào <em>từ giờ</em>. Tài liệu đã
-                  index vẫn giữ tham số lúc index — muốn đổi thì index lại.
+                  {t("col_settings_processing_desc")}
                 </p>
                 <CollectionConfigFields draft={draft} onChange={setDraft} />
               </div>
@@ -214,7 +214,7 @@ export function CollectionSettingsDialog({
             size="sm"
             onClick={() => onOpenChange(false)}
           >
-            Huỷ
+            {t("conn_cancel_btn")}
           </Button>
           <Button
             type="button"
@@ -227,7 +227,7 @@ export function CollectionSettingsDialog({
             ) : (
               <Check className="size-3.5" aria-hidden />
             )}
-            Lưu cấu hình
+            {t("col_settings_save_btn")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -244,6 +244,7 @@ export function CollectionSettingsDialog({
  * tham số khác thì tạo bộ mới và index lại.
  */
 function FrozenEmbedding({ embedding }: { embedding: CollectionEmbedding }) {
+  const { t } = useI18n();
   const rows: [string, string][] = [
     ["Loại", embedding.type ?? "—"],
     ["Model", embedding.model_name ?? "—"],
@@ -266,8 +267,7 @@ function FrozenEmbedding({ embedding }: { embedding: CollectionEmbedding }) {
         Embedding
       </p>
       <p className="mb-2.5 text-xs text-muted-foreground">
-        Vector của bộ này được tạo bằng đúng các tham số dưới đây, nên chúng
-        không sửa được. Cần tham số khác thì tạo bộ mới rồi index lại.
+        {t("col_settings_frozen_embedding_desc")}
       </p>
 
       <dl className="divide-y rounded-md border bg-muted/20 text-sm">

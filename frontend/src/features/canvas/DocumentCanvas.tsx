@@ -227,7 +227,7 @@ export function DocumentCanvas({
             size="sm"
             onClick={() => setShowToC((v) => !v)}
             className="h-7.5 gap-1 text-xs font-medium"
-            title="Bật/Tắt Cây mục lục"
+            title={t("canvas_toggle_outline")}
           >
             <ListTree className="size-3.5 text-emerald-600" />
             <span>{t("toc_button")}</span>
@@ -247,7 +247,7 @@ export function DocumentCanvas({
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {t("view_mode_slice")}
+              {t("canvas_mode_slice")}
             </button>
             <button
               type="button"
@@ -259,7 +259,7 @@ export function DocumentCanvas({
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {t("view_mode_pdf")}
+              {t("canvas_mode_pdf")}
             </button>
           </div>
         </div>
@@ -306,7 +306,7 @@ export function DocumentCanvas({
               size="icon"
               className="size-7.5 text-muted-foreground"
               onClick={onToggleExpand}
-              title={isExpanded ? "Thu gọn Canvas" : "Mở rộng Canvas"}
+              title={isExpanded ? t("canvas_collapse") : t("canvas_expand")}
             >
               {isExpanded ? (
                 <Minimize2 className="size-3.5" />
@@ -322,7 +322,7 @@ export function DocumentCanvas({
               size="icon"
               className="size-7.5 text-muted-foreground hover:text-destructive"
               onClick={onClose}
-              title="Đóng Canvas"
+              title={t("canvas_close")}
             >
               <X className="size-3.5" />
             </Button>
@@ -451,11 +451,11 @@ export function DocumentCanvas({
                 <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-medium min-w-0">
                   <span className="size-2 rounded-full bg-emerald-600 animate-pulse shrink-0" />
                   <span className="truncate">
-                    Trích dẫn đối soát: {source?.section_title || "Điều khoản tham chiếu"}
+                    {t("canvas_verified_citation")}: {source?.section_title || t("canvas_mode_slice")}
                   </span>
                 </div>
                 <span className="font-mono text-[11px] text-muted-foreground shrink-0 ml-2">
-                  Trang tham chiếu: {pdfTargetPage} / {currentTotalPages}
+                  {t("canvas_ref_page")}: {pdfTargetPage} / {currentTotalPages}
                 </span>
               </div>
 
@@ -475,7 +475,7 @@ export function DocumentCanvas({
                 <div className="border-t bg-card p-3 max-h-44 overflow-y-auto shrink-0 select-none">
                   <div className="flex items-center gap-1.5 border-b pb-1.5 text-xs font-semibold text-foreground">
                     <Sigma className="size-3.5 text-emerald-600" />
-                    <span>Công thức trích xuất trong mục ({source.formulas.length})</span>
+                    <span>{t("canvas_formulas_title")} ({source.formulas.length})</span>
                   </div>
                   <div className="divide-y mt-1.5">
                     {source.formulas.map((f, i) => {
@@ -490,7 +490,7 @@ export function DocumentCanvas({
                             size="icon"
                             className="size-6 shrink-0"
                             onClick={() => copyToClipboard(formulaStr)}
-                            title="Sao chép LaTeX"
+                            title={t("canvas_copy_latex")}
                           >
                             <Copy className="size-3" />
                           </Button>

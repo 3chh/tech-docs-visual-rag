@@ -2,9 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Database,
   Globe,
+  Info,
   Server,
   Settings,
   Sparkles,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -12,21 +14,15 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 import { ConnectionsSection } from "./ConnectionsSection";
-import {
-  LockedSetting,
-  SettingGroup,
-} from "./SettingRow";
+import { LockedSetting, SettingGroup } from "./SettingRow";
 import type { StoredSettings } from "./types";
 
 export interface SettingsDialogProps {
@@ -37,6 +33,8 @@ export interface SettingsDialogProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
+
+type SettingsTabId = "general" | "models" | "vectordb" | "system";
 
 export function SettingsDialog({
   trigger,
@@ -51,237 +49,344 @@ export function SettingsDialog({
   });
 
   const { t, language, setLanguage } = useI18n();
-  const [activeTab, setActiveTab] = useState<string>("models");
+  const [activeTab, setActiveTab] = useState<SettingsTabId>("general");
 
   const embedding = data?.indexing.embedding;
   const vectordb = data?.indexing.vectordb;
-  const vlm = data?.models.vlm;
-  const llm = data?.models.llm;
+
+  // Cấu hình các mục điều hướng sidebar bên trái (Tham khảo thiết kế WeKnora)
+  const navGroups: {
+    groupLabel: string;
+    items: {
+      id: SettingsTabId;
+      label: string;
+      desc: string;
+      icon: typeof Settings;
+    }[];
+  }[] = [
+    {
+      groupLabel: t("settings_group_general"),
+      items: [
+        {
+          id: "general",
+          label: t("settings_tab_general"),
+          desc: t("settings_tab_general_desc"),
+          icon: Globe,
+        },
+        {
+          id: "models",
+          label: t("settings_tab_models"),
+          desc: t("settings_tab_models_desc"),
+          icon: Sparkles,
+        },
+      ],
+    },
+    {
+      groupLabel: t("settings_group_infrastructure"),
+      items: [
+        {
+          id: "vectordb",
+          label: t("settings_tab_vectordb"),
+          desc: t("settings_tab_vectordb_desc"),
+          icon: Database,
+        },
+        {
+          id: "system",
+          label: t("settings_tab_storage"),
+          desc: t("settings_tab_storage_desc"),
+          icon: Server,
+        },
+      ],
+    },
+  ];
+
+  // Lấy thông tin tiêu đề và mô tả của tab đang chọn
+  const activeItem = navGroups
+    .flatMap((g) => g.items)
+    .find((i) => i.id === activeTab) ?? navGroups[0].items[0];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
 
-      <DialogContent className="sm:max-w-[620px] max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
-        {/* Header */}
-        <DialogHeader className="px-6 pt-5 pb-3 border-b bg-card/60">
-          <div className="flex items-center gap-2">
-            <div className="flex size-7 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600">
-              <Settings className="size-4" />
+      <DialogContent className="sm:max-w-[860px] w-[95vw] h-[580px] max-h-[90vh] p-0 flex flex-row overflow-hidden rounded-xl shadow-2xl border bg-background">
+        {/* ============================================================ */}
+        {/* 1. LEFT SIDEBAR NAVIGATION (WeKnora Pattern)                 */}
+        {/* ============================================================ */}
+        <aside className="w-56 sm:w-60 shrink-0 border-r border-border/80 bg-muted/25 flex flex-col justify-between select-none">
+          <div className="p-3.5 space-y-4">
+            {/* Sidebar Header */}
+            <div className="flex items-center gap-2.5 px-1 py-1">
+              <div className="flex size-7 items-center justify-center rounded-md bg-emerald-600 text-white shadow-xs">
+                <Settings className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-xs font-bold tracking-tight text-foreground truncate">
+                  {t("settings_modal_title")}
+                </h2>
+                <p className="text-[10px] text-muted-foreground truncate font-mono">
+                  Cosmo ChatPDF
+                </p>
+              </div>
             </div>
+
+            {/* Navigation Groups */}
+            <nav className="space-y-4">
+              {navGroups.map((group, gIdx) => (
+                <div key={gIdx} className="space-y-1">
+                  <p className="px-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                    {group.groupLabel}
+                  </p>
+                  <div className="space-y-0.5">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setActiveTab(item.id)}
+                          className={cn(
+                            "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-all duration-150 text-left font-medium",
+                            isActive
+                              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-semibold border-l-3 border-emerald-600 shadow-2xs"
+                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                          )}
+                        >
+                          <Icon
+                            className={cn(
+                              "size-4 shrink-0",
+                              isActive
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-muted-foreground/80",
+                            )}
+                          />
+                          <span className="truncate">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </nav>
+          </div>
+
+          {/* Sidebar Footer Info */}
+          <div className="p-3 border-t border-border/60 bg-muted/30 text-[10px] text-muted-foreground font-mono">
+            <span>Stack: v0.9.2 · Blackwell Ready</span>
+          </div>
+        </aside>
+
+        {/* ============================================================ */}
+        {/* 2. RIGHT CONTENT AREA                                        */}
+        {/* ============================================================ */}
+        <div className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden">
+          {/* Content Header */}
+          <div className="flex items-center justify-between border-b px-6 py-4 bg-card/40 shrink-0">
             <div>
-              <DialogTitle className="text-sm font-semibold">
-                Cấu hình Hệ thống Chung
-              </DialogTitle>
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                {activeItem.label}
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {activeItem.desc}
+              </p>
             </div>
-          </div>
-        </DialogHeader>
 
-        {/* Tab Navigation */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <div className="px-6 pt-2 border-b bg-muted/20">
-            <TabsList className="h-9 w-full justify-start bg-transparent p-0 gap-1">
-              <TabsTrigger
-                value="models"
-                className="h-8 gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-2xs rounded-t-md"
-              >
-                <Sparkles className="size-3.5" />
-                <span>Mô hình AI</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="vectordb"
-                className="h-8 gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-2xs rounded-t-md"
-              >
-                <Database className="size-3.5" />
-                <span>Vector DB & Embedding</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="system"
-                className="h-8 gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-2xs rounded-t-md"
-              >
-                <Server className="size-3.5" />
-                <span>Hạ tầng & Lưu trữ</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="interface"
-                className="h-8 gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-2xs rounded-t-md"
-              >
-                <Globe className="size-3.5" />
-                <span>Ngôn ngữ & Giao diện</span>
-              </TabsTrigger>
-            </TabsList>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7.5 rounded-md text-muted-foreground hover:text-foreground"
+              onClick={() => onOpenChange?.(false)}
+              title={t("settings_close_btn")}
+            >
+              <X className="size-4" />
+            </Button>
           </div>
 
+          {/* Content Scrollable Body */}
           <div className="flex-1 overflow-y-auto p-6 min-h-0">
             {isLoading ? (
               <div className="space-y-3">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full rounded-md" />
+                <Skeleton className="h-10 w-full rounded-md" />
+                <Skeleton className="h-10 w-full rounded-md" />
               </div>
             ) : (
               <>
-                {/* Tab 1: Mô hình AI */}
-                <TabsContent value="models" className="m-0 space-y-4">
-                  <SettingGroup title="Kết nối mô hình">
+                {/* ---------------------------------------------------- */}
+                {/* TAB 1: Cài đặt chung & Ngôn ngữ (General & Language) */}
+                {/* ---------------------------------------------------- */}
+                {activeTab === "general" && (
+                  <div className="space-y-6">
+                    <SettingGroup title={t("settings_group_general")}>
+                      {/* Ngôn ngữ giao diện */}
+                      <div className="flex items-center justify-between py-3 border-b">
+                        <div className="pr-4">
+                          <p className="text-xs font-semibold text-foreground">
+                            {t("settings_language_label")}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {t("settings_language_desc")}
+                          </p>
+                        </div>
+                        <div className="flex items-center rounded-lg bg-muted/60 p-1 border border-border/70 text-xs shadow-2xs shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setLanguage("vi")}
+                            className={cn(
+                              "rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-200 cursor-pointer select-none",
+                              language === "vi"
+                                ? "bg-emerald-600 text-white font-semibold shadow-xs"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            Tiếng Việt (VI)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setLanguage("en")}
+                            className={cn(
+                              "rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-200 cursor-pointer select-none",
+                              language === "en"
+                                ? "bg-emerald-600 text-white font-semibold shadow-xs"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            English (EN)
+                          </button>
+                        </div>
+                      </div>
+                    </SettingGroup>
+
+                    {/* Runtime Information */}
+                    <SettingGroup title={t("settings_runtime_info")}>
+                      <LockedSetting
+                        label={t("settings_version_label")}
+                        value="1.0.0 (Tech-Docs Visual RAG)"
+                        mono
+                      />
+                      <LockedSetting
+                        label={t("settings_environment_label")}
+                        value="Docker Compose (Profiles: app, worker, vllm)"
+                        mono
+                      />
+                      <LockedSetting
+                        label={t("settings_compute_device")}
+                        value="NVIDIA RTX 5090 (32GB VRAM · sm_120)"
+                        mono
+                      />
+                    </SettingGroup>
+                  </div>
+                )}
+
+                {/* ---------------------------------------------------- */}
+                {/* TAB 2: Mô hình AI & Kết nối (Model Connections)       */}
+                {/* ---------------------------------------------------- */}
+                {activeTab === "models" && (
+                  <div className="space-y-4">
                     <ConnectionsSection />
-                  </SettingGroup>
+                  </div>
+                )}
 
-                  <SettingGroup title="Chi tiết mô hình đang dùng">
-                    <LockedSetting
-                      label="Mô hình VLM phục vụ"
-                      value={vlm?.model_name ?? "Qwen2-VL-7B-Instruct"}
-                      tooltip="Mô hình thị giác ngôn ngữ nhận ảnh lát cắt để đọc điều khoản và công thức."
-                    />
-                    <LockedSetting
-                      label="Cổng Endpoint VLM"
-                      value={vlm?.endpoint ?? "http://localhost:8000/v1"}
-                      mono
-                    />
-                    <LockedSetting
-                      label="Trạng thái API Key"
-                      value={vlm?.api_key_configured ? "Đã cấu hình an toàn" : "Chưa yêu cầu"}
-                    />
-                  </SettingGroup>
+                {/* ---------------------------------------------------- */}
+                {/* TAB 3: Vector DB & Embedding                         */}
+                {/* ---------------------------------------------------- */}
+                {activeTab === "vectordb" && (
+                  <div className="space-y-6">
+                    <SettingGroup title="Qdrant Vector Database">
+                      <LockedSetting
+                        label={t("settings_qdrant_host")}
+                        value={vectordb?.uri ?? "http://qdrant:6333"}
+                        mono
+                      />
+                      <LockedSetting
+                        label={t("settings_qdrant_collection")}
+                        value={vectordb?.collection_name ?? "context"}
+                        mono
+                      />
+                      <LockedSetting
+                        label={t("settings_search_limit")}
+                        value={String(vectordb?.search_limit ?? 20)}
+                      />
+                    </SettingGroup>
 
-                  <SettingGroup title="Mô hình Ngôn ngữ & Nhận diện Bố cục">
-                    <LockedSetting
-                      label="Mô hình Trích xuất Bố cục (Layout)"
-                      value={data?.document.layout.model_name ?? "PP-DocLayout_plus-L"}
-                      note="Phân đoạn tiêu đề, bảng số liệu và công thức"
-                    />
-                    <LockedSetting
-                      label="Mô hình Dò chữ (Text Detector)"
-                      value={data?.document.preprocess.text_model ?? "doc-layout-v1"}
-                    />
-                    <LockedSetting
-                      label="Mô hình LLM phụ trợ"
-                      value={llm?.model_name ?? "gpt-4o-mini"}
-                    />
-                  </SettingGroup>
-                </TabsContent>
+                    <SettingGroup title="Visual Embedding Engine (ColQwen)">
+                      <LockedSetting
+                        label={t("settings_embed_model")}
+                        value={embedding?.model_name ?? "tsystems/colqwen2.5-3b-multilingual-v1.0"}
+                        mono
+                      />
+                      <LockedSetting
+                        label={t("settings_compute_device")}
+                        value={embedding?.device ?? "cuda"}
+                        mono
+                      />
+                      <LockedSetting
+                        label={t("settings_vector_dim")}
+                        value={String(embedding?.dim ?? 128)}
+                      />
+                      <LockedSetting
+                        label={t("settings_max_visual_tokens")}
+                        value={String(embedding?.max_num_visual_tokens ?? 8192)}
+                      />
+                      <LockedSetting
+                        label={t("settings_batching_mode")}
+                        value={embedding?.batching_mode ?? "dynamic"}
+                      />
+                    </SettingGroup>
+                  </div>
+                )}
 
-                {/* Tab 2: Vector DB & Embedding */}
-                <TabsContent value="vectordb" className="m-0 space-y-4">
-                  <SettingGroup title="Cơ sở dữ liệu Vector (Milvus)">
-                    <LockedSetting
-                      label="Loại Vector DB"
-                      value={vectordb?.type ?? "Milvus"}
-                    />
-                    <LockedSetting
-                      label="Địa chỉ kết nối (URI)"
-                      value={vectordb?.uri ?? "localhost:19530"}
-                      mono
-                    />
-                    <LockedSetting
-                      label="Collection gốc"
-                      value={vectordb?.collection_name ?? "cosmo_documents"}
-                      mono
-                    />
-                    <LockedSetting
-                      label="Giới hạn tra cứu (Search Limit)"
-                      value={String(vectordb?.search_limit ?? 20)}
-                    />
-                  </SettingGroup>
-
-                  <SettingGroup title="Mô hình Embedding Thị giác">
-                    <LockedSetting
-                      label="Mô hình Embedding"
-                      value={embedding?.model_name ?? "vidore/colpali-v1.2"}
-                      mono
-                    />
-                    <LockedSetting
-                      label="Thiết bị tính toán"
-                      value={embedding?.device ?? "cuda"}
-                    />
-                    <LockedSetting
-                      label="Số chiều vector (Dim)"
-                      value={String(embedding?.dim ?? 128)}
-                    />
-                    <LockedSetting
-                      label="Visual Tokens tối đa"
-                      value={String(embedding?.max_num_visual_tokens ?? 1024)}
-                    />
-                    <LockedSetting
-                      label="Chế độ gom nhóm (Batching Mode)"
-                      value={embedding?.batching_mode ?? "dynamic"}
-                    />
-                  </SettingGroup>
-                </TabsContent>
-
-                {/* Tab 3: Hạ tầng & Lưu trữ */}
-                <TabsContent value="system" className="m-0 space-y-4">
-                  <SettingGroup title="Lưu trữ & Dịch vụ Nền">
-                    <LockedSetting
-                      label="Thư mục Metadata"
-                      value={data?.metadata_dir ?? "/data/metadata"}
-                      mono
-                    />
-                    <LockedSetting
-                      label="Thư mục Dữ liệu (Data Dir)"
-                      value={data?.data_dir ?? "/data"}
-                      mono
-                    />
-                    <LockedSetting
-                      label="Cổng Worker xử lý tệp"
-                      value={data?.document.worker_endpoint ?? "http://localhost:8000"}
-                      mono
-                    />
-                    <LockedSetting
-                      label="Mức ghi log hệ thống"
-                      value={data?.log_level ?? "INFO"}
-                    />
-                  </SettingGroup>
-                </TabsContent>
-
-                {/* Tab 4: Ngôn ngữ & Giao diện */}
-                <TabsContent value="interface" className="m-0 space-y-4">
-                  <SettingGroup title="Tuỳ chọn Giao diện">
-                    <div className="flex items-center justify-between py-2">
-                      <div>
-                        <p className="text-xs font-semibold text-foreground">{t("language_switch")}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Ngôn ngữ áp dụng cho bảng điều khiển và hội thoại.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant={language === "vi" ? "default" : "outline"}
-                          size="sm"
-                          className="h-8 text-xs font-medium"
-                          onClick={() => setLanguage("vi")}
-                        >
-                          Tiếng Việt
-                        </Button>
-                        <Button
-                          variant={language === "en" ? "default" : "outline"}
-                          size="sm"
-                          className="h-8 text-xs font-medium"
-                          onClick={() => setLanguage("en")}
-                        >
-                          English
-                        </Button>
-                      </div>
-                    </div>
-                  </SettingGroup>
-                </TabsContent>
+                {/* ---------------------------------------------------- */}
+                {/* TAB 4: Hạ tầng & Lưu trữ (Storage & Services)         */}
+                {/* ---------------------------------------------------- */}
+                {activeTab === "system" && (
+                  <div className="space-y-6">
+                    <SettingGroup title={t("settings_tab_storage")}>
+                      <LockedSetting
+                        label={t("settings_metadata_dir")}
+                        value={data?.metadata_dir ?? "/data/metadata"}
+                        mono
+                      />
+                      <LockedSetting
+                        label={t("settings_data_dir")}
+                        value={data?.data_dir ?? "/data"}
+                        mono
+                      />
+                      <LockedSetting
+                        label={t("settings_worker_endpoint")}
+                        value={data?.document.worker_endpoint ?? "http://worker:8001/upload_pdf/"}
+                        mono
+                      />
+                      <LockedSetting
+                        label={t("settings_log_level")}
+                        value={data?.log_level ?? "INFO"}
+                        mono
+                      />
+                    </SettingGroup>
+                  </div>
+                )}
               </>
             )}
           </div>
-        </Tabs>
 
-        {/* Footer */}
-        <DialogFooter className="border-t bg-muted/15 px-6 py-3 flex items-center justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenChange?.(false)}
-            className="h-8 text-xs"
-          >
-            Đóng
-          </Button>
-        </DialogFooter>
+          {/* Content Footer */}
+          <div className="border-t bg-muted/15 px-6 py-2.5 flex items-center justify-between shrink-0">
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+              <Info className="size-3 text-emerald-600" />
+              <span>{t("settings_immutable_notice")}</span>
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange?.(false)}
+              className="h-7.5 px-3 text-xs"
+            >
+              {t("settings_close_btn")}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

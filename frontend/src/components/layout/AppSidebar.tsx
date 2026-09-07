@@ -76,7 +76,7 @@ export function AppSidebar({
   const { data, isLoading, isError, refetch } = useConfiguredCollections();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
-  const { t } = useI18n();
+  const { t, language } = useI18n();
 
   const items = data?.collections ?? [];
   const collectionSessions = sessions.filter((s) => s.collection === collection);
@@ -115,7 +115,7 @@ export function AppSidebar({
                 size="icon"
                 onClick={toggleSidebar}
                 className="size-7 shrink-0 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-                aria-label="Thu gọn hoặc mở rộng sidebar"
+                aria-label={isCollapsed ? t("sidebar_expand_tooltip") : t("sidebar_collapse_tooltip")}
               >
                 {isCollapsed ? (
                   <PanelLeftOpen className="size-4" />
@@ -125,7 +125,7 @@ export function AppSidebar({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={10}>
-              {isCollapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
+              {isCollapsed ? t("sidebar_expand_tooltip") : t("sidebar_collapse_tooltip")}
             </TooltipContent>
           </Tooltip>
         </div>
@@ -162,7 +162,7 @@ export function AppSidebar({
         {/* 2. MAIN WORKSPACE TABS (Được chuyển vào Sidebar) */}
         <SidebarGroup className="p-0">
           <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 px-2 py-1 group-data-[collapsible=icon]:hidden">
-            Không gian làm việc
+            {t("workspace_section_title")}
           </SidebarGroupLabel>
 
           <SidebarGroupContent>
@@ -236,15 +236,15 @@ export function AppSidebar({
               {!isLoading && items.length === 0 && (
                 <div className="px-2 py-1.5 group-data-[collapsible=icon]:hidden">
                   <p className="text-[11px] text-muted-foreground">
-                    Chưa có bộ tài liệu nào.
+                    {language === "vi" ? "Chưa có bộ tài liệu nào." : "No collections yet."}
                   </p>
                   <Button
                     variant="link"
                     size="sm"
-                    className="h-auto p-0 text-[11px]"
+                    className="h-auto p-0 text-[11px] text-emerald-600 hover:text-emerald-700"
                     onClick={onCreateCollection}
                   >
-                    Tạo bộ đầu tiên
+                    {language === "vi" ? "Tạo bộ đầu tiên" : "Create first collection"}
                   </Button>
                 </div>
               )}
@@ -269,7 +269,7 @@ export function AppSidebar({
                     className="h-auto p-0 text-[11px] text-destructive"
                     onClick={() => void refetch()}
                   >
-                    Tải lại danh sách
+                    {language === "vi" ? "Tải lại danh sách" : "Reload list"}
                   </Button>
                 </div>
               )}

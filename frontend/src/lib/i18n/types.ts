@@ -106,4 +106,97 @@ export interface TranslationDictionary {
   switch_account: string;
   language_switch: string;
   language_name: string;
+
+  // Settings Dialog (Left Sidebar Layout)
+  settings_modal_title: string;
+  settings_modal_subtitle: string;
+  settings_group_general: string;
+  settings_group_infrastructure: string;
+  settings_tab_general: string;
+  settings_tab_general_desc: string;
+  settings_tab_models: string;
+  settings_tab_models_desc: string;
+  settings_tab_vectordb: string;
+  settings_tab_vectordb_desc: string;
+  settings_tab_storage: string;
+  settings_tab_storage_desc: string;
+  settings_close_btn: string;
+  settings_language_label: string;
+  settings_language_desc: string;
+  settings_runtime_info: string;
+  settings_version_label: string;
+  settings_environment_label: string;
+
+  // Technical parameters in Settings
+  settings_qdrant_host: string;
+  settings_qdrant_collection: string;
+  settings_search_limit: string;
+  settings_embed_model: string;
+  settings_compute_device: string;
+  settings_vector_dim: string;
+  settings_max_visual_tokens: string;
+  settings_batching_mode: string;
+  settings_metadata_dir: string;
+  settings_data_dir: string;
+  settings_worker_endpoint: string;
+  settings_log_level: string;
+  settings_immutable_notice: string;
+
+  // Model Connections
+  conn_header_title: string;
+  conn_header_desc: string;
+  conn_add_btn: string;
+  conn_empty_title: string;
+  conn_empty_desc: string;
+  conn_name_label: string;
+  conn_provider_label: string;
+  conn_model_label: string;
+  conn_endpoint_label: string;
+  conn_key_label: string;
+  conn_key_placeholder_new: string;
+  conn_key_placeholder_edit: string;
+  conn_capabilities_label: string;
+  conn_cap_vlm: string;
+  conn_cap_llm: string;
+  conn_save_btn: string;
+  conn_cancel_btn: string;
+  conn_delete_confirm: string;
+  conn_self_hosted_badge: string;
+  conn_cloud_badge: string;
+
+  // Workspace & Canvas
+  workspace_section_title: string;
+  sidebar_collapse_tooltip: string;
+  sidebar_expand_tooltip: string;
+  doc_configure_btn: string;
+  doc_create_btn: string;
+  doc_stat_books: string;
+  doc_stat_pages: string;
+  doc_stat_sections: string;
+  canvas_toggle_outline: string;
+  canvas_mode_slice: string;
+  canvas_mode_pdf: string;
+  canvas_expand: string;
+  canvas_collapse: string;
+  canvas_close: string;
+  canvas_verified_citation: string;
+  canvas_ref_page: string;
+  canvas_formulas_title: string;
+  canvas_copy_latex: string;
+
+  // Collection Settings Dialog
+  col_settings_title: string;
+  col_settings_not_configured: string;
+  col_settings_select_model_hint: string;
+  col_settings_display_name: string;
+  col_settings_processing_params: string;
+  col_settings_changed_suffix: string;
+  col_settings_processing_desc: string;
+  col_settings_frozen_embedding_desc: string;
+  col_settings_save_btn: string;
+
+  // Sample Queries
+  sample_q1: string;
+  sample_q2: string;
+  sample_q3: string;
 }
