@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, FileSliders, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, FileSliders, Loader2, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCollectionConfig, useUpdateCollection } from "@/hooks/use-api";
 import { ApiError } from "@/lib/api";
-import type { CollectionOut } from "@/lib/types";
+import type { CollectionEmbedding, CollectionOut } from "@/lib/types";
 
 import {
   countOverrides,
@@ -56,7 +56,8 @@ export function CollectionSettingsDialog({
   // Nạp lại từ server mỗi lần mở hoặc đổi bộ: server là nguồn sự thật.
   useEffect(() => {
     if (!config) return;
-    setDraft({ processing: config.processing, ask: config.ask });
+    // embedding không vào draft: nó đóng băng, chỉ hiển thị.
+    setDraft({ processing: config.processing, ask: config.ask, embedding: {} });
     setDescription(config.description);
     setVlmId(config.vlm_connection_id);
     setLlmId(config.llm_connection_id);
@@ -184,6 +185,10 @@ export function CollectionSettingsDialog({
               </div>
 
               <div className="border-t pt-4">
+                <FrozenEmbedding embedding={config.embedding} />
+              </div>
+
+              <div className="border-t pt-4">
                 <p className="mb-2 text-sm font-medium">
                   Tham số xử lý
                   {overrideCount > 0 && (
@@ -227,5 +232,54 @@ export function CollectionSettingsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+
+/**
+ * Cấu hình embedding của bộ — chỉ đọc.
+ *
+ * Không phải "chưa làm nút sửa": vector của bộ này được tạo bằng đúng những
+ * tham số này, đổi chúng là mọi vector cũ không so được với vector mới. Muốn
+ * tham số khác thì tạo bộ mới và index lại.
+ */
+function FrozenEmbedding({ embedding }: { embedding: CollectionEmbedding }) {
+  const rows: [string, string][] = [
+    ["Loại", embedding.type ?? "—"],
+    ["Model", embedding.model_name ?? "—"],
+    [
+      "Token thị giác mỗi trang",
+      embedding.max_num_visual_tokens != null
+        ? String(embedding.max_num_visual_tokens)
+        : "—",
+    ],
+  ];
+
+  if (embedding.min_width != null) {
+    rows.push(["Chiều rộng tối thiểu", `${embedding.min_width} px`]);
+  }
+
+  return (
+    <div>
+      <p className="mb-1 flex items-center gap-1.5 text-sm font-medium">
+        <Lock className="size-3.5 text-muted-foreground" aria-hidden />
+        Embedding
+      </p>
+      <p className="mb-2.5 text-xs text-muted-foreground">
+        Vector của bộ này được tạo bằng đúng các tham số dưới đây, nên chúng
+        không sửa được. Cần tham số khác thì tạo bộ mới rồi index lại.
+      </p>
+
+      <dl className="divide-y rounded-md border bg-muted/20 text-sm">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-baseline gap-3 px-3 py-2">
+            <dt className="shrink-0 text-muted-foreground">{label}</dt>
+            <dd className="min-w-0 flex-1 truncate text-right font-mono text-xs">
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }

@@ -286,6 +286,22 @@ export interface CollectionAsk {
   vlm_temperature?: number;
 }
 
+/**
+ * Tham số embedding của một bộ tài liệu.
+ *
+ * Khác `CollectionProcessing`/`CollectionAsk`: server lưu ĐẦY ĐỦ (không thưa)
+ * và **đóng băng** sau khi tạo bộ. Vector chỉ so được với vector cùng tham số,
+ * nên đổi là phải index lại cả bộ.
+ *
+ * Lúc gửi lên để tạo bộ thì vẫn thưa: bỏ trống nghĩa là lấy của server.
+ */
+export interface CollectionEmbedding {
+  type?: string;
+  model_name?: string;
+  max_num_visual_tokens?: number;
+  min_width?: number;
+}
+
 export interface CollectionOut {
   name: string;
   description: string;
@@ -295,6 +311,8 @@ export interface CollectionOut {
   updated_at: string;
   processing: CollectionProcessing;
   ask: CollectionAsk;
+  /** Đã chốt lúc tạo bộ, không sửa được. */
+  embedding: CollectionEmbedding;
   /** Cả hai kết nối còn dùng được không. False thì phải chọn lại mô hình. */
   is_ready: boolean;
   blocked_reason: string | null;
@@ -315,6 +333,11 @@ export interface CreateCollectionInput {
   description?: string;
   processing?: CollectionProcessing;
   ask?: CollectionAsk;
+  /** Chỉ gửi khi TẠO bộ. Sửa sau đó server trả 409 embedding_immutable. */
+  embedding?: CollectionEmbedding;
 }
 
-export type UpdateCollectionInput = Partial<Omit<CreateCollectionInput, "name">>;
+/** Không có `embedding`: nó đóng băng sau khi tạo. */
+export type UpdateCollectionInput = Partial<
+  Omit<CreateCollectionInput, "name" | "embedding">
+>;

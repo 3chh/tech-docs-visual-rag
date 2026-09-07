@@ -16,6 +16,7 @@ import {
   setDraftValue,
   type CollectionDraft,
   type Field,
+  type FieldGroup,
 } from "./collection-config";
 
 /**
@@ -28,9 +29,12 @@ import {
 export function CollectionConfigFields({
   draft,
   onChange,
+  groups = COLLECTION_FIELD_GROUPS,
 }: {
   draft: CollectionDraft;
   onChange: (draft: CollectionDraft) => void;
+  /** Mặc định là tham số chạy nóng. Dialog tạo bộ truyền thêm nhóm embedding. */
+  groups?: FieldGroup[];
 }) {
   const { data: settings, isLoading } = useQuery({
     queryKey: ["settings"],
@@ -51,7 +55,7 @@ export function CollectionConfigFields({
 
   return (
     <div className="space-y-4">
-      {COLLECTION_FIELD_GROUPS.map((group) => (
+      {groups.map((group) => (
         <SettingGroup key={group.title} title={group.title}>
           {group.hint && (
             <p className="pb-1 text-xs text-muted-foreground">{group.hint}</p>
@@ -82,6 +86,8 @@ function FieldControl({
   settings: SettingsResponse;
   onChange: (draft: CollectionDraft) => void;
 }) {
+  if (field.showIf && !field.showIf(settings)) return null;
+
   const set = (value: unknown) => onChange(setDraftValue(draft, field.path, value));
   const current = getPath(draft, field.path);
 

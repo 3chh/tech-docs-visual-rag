@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   COLLECTION_FIELD_GROUPS,
+  EMBEDDING_FIELD_GROUP,
   countOverrides,
   EMPTY_DRAFT,
   getPath,
@@ -20,6 +21,7 @@ describe("setDraftValue giữ draft thưa", () => {
     expect(draft).toEqual({
       processing: { preprocess: { pdf_to_image: { dpi: 400 } } },
       ask: {},
+      embedding: {},
     });
   });
 
@@ -109,11 +111,14 @@ describe("countOverrides", () => {
 });
 
 describe("bảng field khớp ràng buộc backend", () => {
-  const fields = COLLECTION_FIELD_GROUPS.flatMap((g) => g.fields);
+  const fields = [
+    ...COLLECTION_FIELD_GROUPS.flatMap((g) => g.fields),
+    ...EMBEDDING_FIELD_GROUP.fields,
+  ];
 
-  it("mọi path đều bắt đầu bằng processing hoặc ask", () => {
+  it("mọi path đều bắt đầu bằng processing, ask hoặc embedding", () => {
     for (const field of fields) {
-      expect(["processing", "ask"]).toContain(field.path[0]);
+      expect(["processing", "ask", "embedding"]).toContain(field.path[0]);
     }
   });
 
@@ -171,5 +176,46 @@ describe("slugify", () => {
     ]) {
       expect(backendRe.test(slugify(name)), name).toBe(true);
     }
+  });
+});
+
+
+describe("field embedding tách riêng khỏi field chạy nóng", () => {
+  it("không lẫn vào COLLECTION_FIELD_GROUPS", () => {
+    const runtimePaths = COLLECTION_FIELD_GROUPS.flatMap((g) =>
+      g.fields.map((f) => f.path[0]),
+    );
+
+    expect(runtimePaths).not.toContain("embedding");
+  });
+
+  it("không tính vào countOverrides", () => {
+    // countOverrides đếm "lệch khỏi mặc định server lúc chạy". Tham số
+    // embedding là lựa chọn lúc tạo bộ, bản chất khác.
+    const draft = setDraftValue(
+      EMPTY_DRAFT,
+      ["embedding", "max_num_visual_tokens"],
+      4096,
+    );
+
+    expect(countOverrides(draft)).toBe(0);
+    expect(draft.embedding.max_num_visual_tokens).toBe(4096);
+  });
+
+  it("KHÔNG cho chọn type hay model_name", () => {
+    // Hai thứ đó quyết định weights nào vào VRAM nên server quyết; backend
+    // trả 400 embedding_not_served nếu bộ xin model khác.
+    const paths = EMBEDDING_FIELD_GROUP.fields.map((f) => f.path.join("."));
+
+    expect(paths).not.toContain("embedding.type");
+    expect(paths).not.toContain("embedding.model_name");
+  });
+
+  it("min_width chỉ hiện với longcolqwen", () => {
+    const minWidth = EMBEDDING_FIELD_GROUP.fields.find(
+      (f) => f.path.at(-1) === "min_width",
+    );
+
+    expect(minWidth?.showIf).toBeDefined();
   });
 });

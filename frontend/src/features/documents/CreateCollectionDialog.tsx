@@ -18,6 +18,7 @@ import { ApiError, ERR_NO_MODELS } from "@/lib/api";
 
 import {
   countOverrides,
+  EMBEDDING_FIELD_GROUP,
   EMPTY_DRAFT,
   slugify,
   type CollectionDraft,
@@ -90,6 +91,7 @@ export function CreateCollectionDialog({
         description: displayName.trim(),
         processing: draft.processing,
         ask: draft.ask,
+        embedding: draft.embedding,
       },
       {
         onSuccess: (config) => {
@@ -201,6 +203,16 @@ export function CreateCollectionDialog({
                   onOpenGeneralSettings();
                 })
               }
+            />
+          </div>
+
+          {/* Embedding lên trước tham số xử lý: đây là quyết định KHÔNG sửa
+              được, nên phải thấy trước khi bấm Tạo. */}
+          <div className="border-t pt-4">
+            <CollectionConfigFields
+              draft={draft}
+              onChange={setDraft}
+              groups={[EMBEDDING_FIELD_GROUP]}
             />
           </div>
 

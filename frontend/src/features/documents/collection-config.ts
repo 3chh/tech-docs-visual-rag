@@ -12,6 +12,7 @@
 
 import type {
   CollectionAsk,
+  CollectionEmbedding,
   CollectionProcessing,
   SettingsResponse,
 } from "@/lib/types";
@@ -19,9 +20,15 @@ import type {
 export interface CollectionDraft {
   processing: CollectionProcessing;
   ask: CollectionAsk;
+  /** Chỉ gửi khi tạo bộ; sau đó server đóng băng. */
+  embedding: CollectionEmbedding;
 }
 
-export const EMPTY_DRAFT: CollectionDraft = { processing: {}, ask: {} };
+export const EMPTY_DRAFT: CollectionDraft = {
+  processing: {},
+  ask: {},
+  embedding: {},
+};
 
 /**
  * Đặt giá trị theo đường dẫn, trả về object mới.
@@ -73,7 +80,11 @@ export function setDraftValue(
     value,
   ) as Partial<CollectionDraft>;
 
-  return { processing: next.processing ?? {}, ask: next.ask ?? {} };
+  return {
+    processing: next.processing ?? {},
+    ask: next.ask ?? {},
+    embedding: next.embedding ?? {},
+  };
 }
 
 export function getPath(obj: object, path: readonly string[]): unknown {
@@ -87,10 +98,12 @@ export function getPath(obj: object, path: readonly string[]): unknown {
 }
 
 type Base = {
-  /** `processing.*` hoặc `ask.*` — đường dẫn trong CollectionDraft. */
+  /** Đường dẫn trong CollectionDraft: `processing.*`, `ask.*`, `embedding.*`. */
   path: readonly string[];
   label: string;
   tooltip?: string;
+  /** Ẩn field khi cấu hình server không dùng tới nó. */
+  showIf?: (s: SettingsResponse) => boolean;
 };
 
 export type Field =
@@ -332,6 +345,50 @@ export const COLLECTION_FIELD_GROUPS: FieldGroup[] = [
     ],
   },
 ];
+
+/**
+ * Tham số embedding — CHỈ hiện lúc tạo bộ.
+ *
+ * Tách khỏi `COLLECTION_FIELD_GROUPS` vì bản chất khác: đây không phải
+ * "lệch khỏi mặc định server lúc chạy" mà là "vector của bộ này sẽ được tạo
+ * bằng gì", và nó đóng băng ngay sau khi tạo. `type` và `model_name` không có
+ * ở đây: chúng quyết định weights nào vào VRAM nên server quyết, không phải bộ.
+ */
+export const EMBEDDING_FIELD_GROUP: FieldGroup = {
+  title: "Embedding (không sửa được sau khi tạo)",
+  hint:
+    "Vector chỉ so được với vector cùng tham số, nên đổi sau này là phải " +
+    "index lại cả bộ. Chọn ngay từ đầu theo loại tài liệu của bộ.",
+  fields: [
+    {
+      kind: "number",
+      path: ["embedding", "max_num_visual_tokens"],
+      label: "Số token thị giác mỗi trang",
+      tooltip:
+        "Cao thì đọc được chữ nhỏ trong bản scan mờ, nhưng tốn VRAM và index " +
+        "chậm hơn. Bộ PDF số hoá sạch thường không cần mức cao.",
+      min: 256,
+      max: 32768,
+      step: 256,
+      serverDefault: (s) => s.indexing.embedding.max_num_visual_tokens,
+    },
+    {
+      kind: "number",
+      path: ["embedding", "min_width"],
+      label: "Chiều rộng tối thiểu",
+      tooltip:
+        "Ghim chiều rộng ảnh rồi để chiều cao tự do, nhờ vậy trang dài không " +
+        "bị nén ngang tới mức mất chữ.",
+      unit: "px",
+      min: 64,
+      max: 4096,
+      step: 8,
+      // Chỉ longcolqwen có smart_resize ghim chiều rộng.
+      showIf: (s) => s.indexing.embedding.type === "longcolqwen",
+      serverDefault: (s) => s.indexing.embedding.min_width ?? 600,
+    },
+  ],
+};
 
 /** Số trường người dùng đã đổi, để hiện lên nút "Tuỳ chỉnh". */
 export function countOverrides(draft: CollectionDraft): number {
