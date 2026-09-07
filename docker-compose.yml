@@ -178,12 +178,16 @@ services:
       start_period: 300s
       retries: 3
 
-  # Bản demo: cùng cổng, cùng alias mạng `backend` nên nginx.conf không đổi.
+  # Bản demo: alias mạng `backend` để nginx.conf không phải đổi.
+  #
+  # container_name KHÔNG được đặt là cosmo-backend: alias mới là thứ nginx cần,
+  # còn trùng tên container thì Docker từ chối khởi động khi stack profile app
+  # còn container cũ — đổi qua lại giữa hai profile là vỡ.
   backend-demo:
     build:
       context: ./backend
       dockerfile: Dockerfile.demo
-    container_name: cosmo-backend
+    container_name: cosmo-backend-demo
     restart: unless-stopped
     profiles: ["demo"]
     ports:
