@@ -8,7 +8,7 @@ Chỉ gồm những gì **đổi nóng được**. Ba lý do một tham số KH�
 3. Client đã kết nối theo tham số đó (`vectordb.uri`, `grpc_port`).
 """
 
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -84,3 +84,22 @@ class AskOverrides(BaseModel):
     toc_preview_limit: Optional[Annotated[int, Field(ge=1, le=100)]] = None
     system_prompt: Optional[str] = None
     vlm_temperature: Optional[Annotated[float, Field(ge=0.0, le=2.0)]] = None
+
+
+class EmbeddingChoice(BaseModel):
+    """Tham số embedding của một bộ tài liệu.
+
+    Khác các lớp Overrides ở trên: đây KHÔNG phải override đổi nóng được. Nó
+    được chốt lúc tạo bộ rồi đóng băng, vì vector chỉ so được với vector cùng
+    tham số. Trường để None nghĩa là "lấy từ cấu hình server lúc tạo bộ", và
+    giá trị đã giải sẽ được lưu lại cụ thể.
+    """
+
+    type: Optional[Literal["longcolqwen", "colqwen", "colpali", "colidefics"]] = None
+    model_name: Optional[str] = Field(default=None, max_length=200)
+    #: Số token thị giác mỗi trang. Cao thì đọc được chữ nhỏ nhưng tốn VRAM.
+    max_num_visual_tokens: Optional[Annotated[int, Field(ge=256, le=32768)]] = None
+    #: Chỉ có ý nghĩa với longcolqwen: ghim chiều rộng, để chiều cao tự do.
+    min_width: Optional[Annotated[int, Field(ge=64, le=4096)]] = None
+
+    model_config = {"protected_namespaces": ()}

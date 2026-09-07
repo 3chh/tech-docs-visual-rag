@@ -63,6 +63,10 @@ class CollectionConfig:
     #: Mặc định hỏi đáp của bộ (top_k, system_prompt...). Client truyền gì
     #: thì cái đó thắng; để trống thì dùng mặc định của server.
     ask: dict[str, Any] = field(default_factory=dict)
+    #: Tham số embedding đã dùng để tạo vector của bộ này. Lưu ĐẦY ĐỦ (không
+    #: thưa như processing/ask) và không sửa được sau khi tạo: vector chỉ so
+    #: được với vector cùng tham số. Đổi thì phải index lại cả bộ.
+    embedding: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -74,6 +78,7 @@ class CollectionConfig:
             "updated_at": self.updated_at,
             "processing": self.processing,
             "ask": self.ask,
+            "embedding": self.embedding,
         }
 
     @classmethod
@@ -87,6 +92,7 @@ class CollectionConfig:
             updated_at=data.get("updated_at", ""),
             processing=data.get("processing", {}),
             ask=data.get("ask", {}),
+            embedding=data.get("embedding", {}),
         )
 
 
@@ -147,6 +153,7 @@ def create_collection(
     description: str = "",
     processing: dict[str, Any] | None = None,
     ask: dict[str, Any] | None = None,
+    embedding: dict[str, Any] | None = None,
 ) -> CollectionConfig:
     name = validate_name(name)
 
@@ -161,6 +168,7 @@ def create_collection(
             llm_connection_id=llm_connection_id,
             processing=processing or {},
             ask=ask or {},
+            embedding=embedding or {},
         )
     )
 

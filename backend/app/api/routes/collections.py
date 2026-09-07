@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from ..errors import (
     COLLECTION_EXISTS,
+    EMBEDDING_IMMUTABLE,
     COLLECTION_NOT_FOUND,
     CONNECTION_INVALID,
     INVALID_NAME,
@@ -28,7 +29,7 @@ from ....core.collections import (
     save_config,
 )
 from ....core.logging import get_logger
-from ...schemas.overrides import AskOverrides, ProcessingOverrides
+from ...schemas.overrides import AskOverrides, EmbeddingChoice, ProcessingOverrides
 from ....core.providers import (
     ConnectionNotFound,
     ConnectionNotUsable,
@@ -49,6 +50,8 @@ class CollectionOut(BaseModel):
     processing: dict[str, Any] = Field(default_factory=dict)
     #: Mặc định hỏi đáp của bộ.
     ask: dict[str, Any] = Field(default_factory=dict)
+    #: Tham số embedding đã tạo ra vector của bộ. Không sửa được.
+    embedding: dict[str, Any] = Field(default_factory=dict)
     #: Cả hai kết nối còn dùng được không. False nghĩa là cần chọn lại mô hình.
     is_ready: bool = True
     #: Vì sao chưa dùng được, nếu is_ready là False.
@@ -71,6 +74,8 @@ class CreateCollectionRequest(BaseModel):
     description: str = ""
     processing: ProcessingOverrides = Field(default_factory=ProcessingOverrides)
     ask: AskOverrides = Field(default_factory=AskOverrides)
+    #: Trường bỏ trống lấy từ cấu hình server lúc tạo. Sau đó đóng băng.
+    embedding: EmbeddingChoice = Field(default_factory=EmbeddingChoice)
 
 
 class UpdateCollectionRequest(BaseModel):
@@ -79,16 +84,23 @@ class UpdateCollectionRequest(BaseModel):
     description: Optional[str] = None
     processing: Optional[ProcessingOverrides] = None
     ask: Optional[AskOverrides] = None
+    #: Chỉ chấp nhận nếu trùng khớp cấu hình đã lưu — UI thường gửi lại nguyên
+    #: payload đọc về, đừng bắt lỗi chuyện đó. Khác thì trả 409.
+    embedding: Optional[EmbeddingChoice] = None
 
 
 def _to_out(config) -> CollectionOut:
     """Kiểm cả hai kết nối để UI biết bộ này còn dùng được không."""
     blocked: Optional[str] = None
 
+    blocked = _embedding_mismatch(config.embedding)
+
     for connection_id, capability, label in (
         (config.vlm_connection_id, "vlm", "trả lời"),
         (config.llm_connection_id, "llm", "sửa mục lục"),
     ):
+        if blocked:
+            break
         try:
             resolve_connection(connection_id, capability)
         except (ConnectionNotFound, ConnectionNotUsable) as e:
@@ -104,9 +116,61 @@ def _to_out(config) -> CollectionOut:
         updated_at=config.updated_at,
         processing=config.processing,
         ask=config.ask,
+        embedding=config.embedding,
         is_ready=blocked is None,
         blocked_reason=blocked,
     )
+
+
+def resolve_embedding(choice: EmbeddingChoice) -> dict[str, Any]:
+    """Điền các trường bỏ trống bằng cấu hình server, trả về giá trị cụ thể.
+
+    Lưu đầy đủ chứ không thưa: mục đích là ghi lại "vector của bộ này được tạo
+    bằng gì", nên thiếu trường nào là mất khả năng phát hiện lệch về sau.
+    """
+    from ....core.config import get_settings
+
+    server = get_settings().embedding
+
+    return {
+        "type": choice.type or server.type,
+        "model_name": choice.model_name or server.model_name,
+        "max_num_visual_tokens": (
+            choice.max_num_visual_tokens
+            if choice.max_num_visual_tokens is not None
+            else server.max_num_visual_tokens
+        ),
+        "min_width": (
+            choice.min_width if choice.min_width is not None else server.min_width
+        ),
+    }
+
+
+def _embedding_mismatch(saved: dict[str, Any]) -> Optional[str]:
+    """Cấu hình embedding của bộ có còn khớp với server đang chạy không.
+
+    Chỉ so `type` và `model_name`: hai thứ này quyết định model nào được nạp,
+    lệch là vector không so được. `max_num_visual_tokens` và `min_width` chỉ
+    chạm processor nên phục vụ được theo từng bộ (xem E2).
+    """
+    if not saved:
+        return None
+
+    from ....core.config import get_settings
+
+    server = get_settings().embedding
+
+    for key, current in (("type", server.type), ("model_name", server.model_name)):
+        recorded = saved.get(key)
+        if recorded and recorded != current:
+            return (
+                f"Cấu hình embedding lệch: bộ này index bằng {key}={recorded!r} "
+                f"nhưng server đang chạy {key}={current!r}. Vector cũ không so "
+                "được với truy vấn mới — đổi lại cấu hình server, hoặc tạo bộ "
+                "mới và index lại."
+            )
+
+    return None
 
 
 def _missing_capabilities() -> list[str]:
@@ -156,6 +220,7 @@ async def create_new_collection(request: CreateCollectionRequest) -> CollectionO
             description=request.description,
             processing=request.processing.model_dump(exclude_none=True),
             ask=request.ask.model_dump(exclude_none=True),
+            embedding=resolve_embedding(request.embedding),
         )
     except InvalidCollectionName as e:
         raise api_error(422, INVALID_NAME, str(e)) from e
@@ -199,6 +264,19 @@ async def update_collection(name: str, request: UpdateCollectionRequest) -> Coll
 
     if request.description is not None:
         config.description = request.description.strip()
+    # Đóng băng embedding: chấp nhận nếu gửi lại đúng cấu hình cũ, khác thì từ chối.
+    if request.embedding is not None:
+        requested = request.embedding.model_dump(exclude_none=True)
+        if any(config.embedding.get(k) != v for k, v in requested.items()):
+            raise api_error(
+                409,
+                EMBEDDING_IMMUTABLE,
+                "Không sửa được cấu hình embedding của bộ đã tạo: vector cũ và "
+                "mới sẽ không so được với nhau. Tạo bộ mới rồi index lại nếu "
+                "cần tham số khác.",
+                current=config.embedding,
+            )
+
     if request.processing is not None:
         config.processing = request.processing.model_dump(exclude_none=True)
     if request.ask is not None:
